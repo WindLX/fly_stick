@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "windlx", email = "1418043337@qq.com" },
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
 ]
 
