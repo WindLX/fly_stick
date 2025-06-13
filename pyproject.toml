@@ -1,0 +1,25 @@
+[project]
+name = "fly-stick"
+version = "0.1.0"
+description = "A Python library for game controller input handling"
+readme = "README.md"
+authors = [
+    { name = "windlx", email = "1418043337@qq.com" },
+]
+requires-python = ">=3.13"
+dependencies = [
+]
+
+
+[tool.maturin]
+module-name = "fly_stick._core"
+python-packages = [
+    "fly_stick",
+]
+python-source = "src"
+
+[build-system]
+requires = [
+    "maturin>=1.0,<2.0",
+]
+build-backend = "maturin"
