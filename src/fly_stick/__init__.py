@@ -1,2 +1,20 @@
-from fly_stick._core import PyJoystick, fetch_connected_devices
-__all__ = ["PyJoystick", "fetch_connected_devices"]
+from fly_stick._core import (
+    PyDevicePool,
+    PyJoystick,
+    JoystickInfo,
+    JoystickState,
+    fetch_connected_joysticks,
+    DeviceItem,
+    DeviceDescription,
+)
+
+__all__ = [
+    "PyDevicePool",
+    "PyJoystick",
+    "JoystickInfo",
+    "JoystickState",
+    "fetch_connected_joysticks",
+    "DeviceItem",
+    "DeviceDescription",
+    "PyDevicePool",
+]

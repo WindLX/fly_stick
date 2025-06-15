@@ -26,7 +26,8 @@ async def monitor_device(device_path: str, device_name: str) -> None:
 
         while True:
             # Get device state
-            axes, buttons, hats = joystick.get_state()
+            state = joystick.get_state()
+            axes, buttons, hats = state.axes, state.buttons, state.hats
 
             # Only print status when there are changes
             if axes or buttons or hats:
@@ -50,19 +51,21 @@ async def main() -> None:
     tasks for each device. The monitoring continues until interrupted by Ctrl+C.
     """
     # Enumerate all available input devices
-    devices = fly_stick.fetch_connected_devices()
+    devices = fly_stick.fetch_connected_joysticks()
 
     if not devices:
         print("No input devices found!")
         return
 
     print(f"Found {len(devices)} devices:")
-    for device_path, device_name in devices:
+    for device in devices:
+        device_path, device_name = device.path, device.name
         print(f"  {device_name} at {device_path}")
 
     # Create list of monitoring tasks
     tasks: list[asyncio.Task] = []
-    for device_path, device_name in devices:
+    for device in devices:
+        device_path, device_name = device.path, device.name
         task = asyncio.create_task(monitor_device(device_path, device_name))
         tasks.append(task)
 

@@ -21,7 +21,8 @@ async def monitor_device(
 
         while True:
             # Get device state
-            axes, buttons, hats = joystick.get_state()
+            state = joystick.get_state()
+            axes, buttons, hats = state.axes, state.buttons, state.hats
 
             # If this is the target device and has channel, send specific axis data
             if device_name == "Thrustmaster T.A320 Copilot" and channel and axes:
@@ -31,8 +32,6 @@ async def monitor_device(
                     axis_data["aileron"] = axes[0]
                 if 1 in axes:
                     axis_data["elevator"] = axes[1]
-                if 5 in axes:
-                    axis_data["rudder"] = axes[5]
 
                 if axis_data:
                     await channel.put(axis_data)
@@ -42,6 +41,8 @@ async def monitor_device(
                 axis_data: dict[str, float] = {}
                 if 2 in axes:
                     axis_data["throttle"] = axes[2]
+                if 5 in axes:
+                    axis_data["rudder"] = axes[5]
 
                 if axis_data:
                     await channel.put(axis_data)
@@ -102,19 +103,21 @@ async def main() -> None:
     channel: asyncio.Queue = asyncio.Queue()
 
     # Enumerate all available input devices
-    devices = fly_stick.fetch_connected_devices()
+    devices = fly_stick.fetch_connected_joysticks()
 
     if not devices:
         print("No input devices found!")
         return
 
     print(f"Found {len(devices)} devices:")
-    for device_path, device_name in devices:
+    for device in devices:
+        device_path, device_name = device.path, device.name
         print(f"  {device_name} at {device_path}")
 
     # Create monitoring task list
     tasks: list[asyncio.Task] = []
-    for device_path, device_name in devices:
+    for device in devices:
+        device_path, device_name = device.path, device.name
         if device_name == "Thrustmaster T.A320 Copilot":
             task = asyncio.create_task(
                 monitor_device(device_path, device_name, channel)

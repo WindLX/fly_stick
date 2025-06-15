@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
+    "toml>=0.10.2",
 ]
 
 
@@ -23,3 +24,9 @@ requires = [
     "maturin>=1.0,<2.0",
 ]
 build-backend = "maturin"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "rich>=14.0.0",
+]
