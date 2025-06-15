@@ -12,6 +12,7 @@ async def main():
     device_pool = PyDevicePool(
         [
             "devices/thrustmaster/ta320.toml",
+            "devices/thrustmaster/twcs.toml",
         ],
         debounce_seconds=0.1,
     )

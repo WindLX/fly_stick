@@ -160,23 +160,27 @@ class PyDevicePool:
         """
         ...
 
-    def fetch_nowait(self) -> JoystickState:
+    def fetch_nowait(self) -> dict[str, JoystickState]:
         """Fetch current joystick state without blocking.
         This method retrieves the current state of all joysticks in the pool without waiting.
         It returns immediately with the latest state information.
         Raises:
             RuntimeError: If the device pool has not been initialized or is not running.
         Returns:
-            JoystickState: The current state of the joystick, containing axes, buttons, and hats.
+            dict[str, JoystickState]: A dictionary mapping joystick names to their current state.
         Note:
-            This method is non-blocking and should be used when immediate state retrieval is needed.
+            This method is non-blocking and returns the most recent state available.
+            It is useful for scenarios where you need to check joystick states without waiting.
         Example:
-            >>> state = device_pool.fetch_nowait()
-            >>> print(state.axes, state.buttons, state.hats)
+            >>> states = device_pool.fetch_nowait()
+            >>> for name, state in states.items():
+            ...     print(f"{name}: {state.axes}, {state.buttons}, {state.hats}")
         """
         ...
 
-    async def fetch(self, timeout_seconds: Optional[float] = None) -> JoystickState:
+    async def fetch(
+        self, timeout_seconds: Optional[float] = None
+    ) -> dict[str, JoystickState]:
         """Fetch current joystick state with optional timeout.
         This method retrieves the current state of all joysticks in the pool, waiting for
         the specified timeout if provided. If no timeout is specified, it will wait indefinitely
@@ -190,13 +194,21 @@ class PyDevicePool:
                 If None, it will wait indefinitely. Defaults to None.
 
         Returns:
-            JoystickState: The current state of the joystick, containing axes, buttons, and hats.
+            dict[str, JoystickState]: A dictionary mapping joystick names to their current state.
         Note:
-            This method is asynchronous and should be awaited. It is useful for scenarios
-            where you need to wait for the joystick state to be updated.
+            This method is asynchronous and will block until the state is available or the timeout
+            is reached. It is useful for scenarios where you need to wait for joystick states to be
+            updated before proceeding.
         Example:
-            >>> state = await device_pool.fetch(timeout_seconds=1.0)
-            >>> print(state.axes, state.buttons, state.hats)
+            >>> try:
+            ...     states = await device_pool.fetch(timeout_seconds=2.0)
+            ...     for name, state in states.items():
+            ...         print(f"{name}: {state.axes}, {state.buttons}, {state.hats}")
+        except TimeoutError:
+            print("Fetching joystick state timed out. No state available.")
+        Raises:
+            RuntimeError: If the device pool has not been initialized or is not running.
+            TimeoutError: If the operation times out before fetching the state.
         """
 
     async def stop(self) -> None:
