@@ -24,7 +24,9 @@ async def main():
         while True:
             # Fetch current input from all devices
             inputs = device_pool.fetch_nowait()
-            pprint(inputs)
+            for device_name, state in inputs.items():
+                print(f"Device: {device_name}")
+                pprint(state.to_dict())
             await asyncio.sleep(0.01)  # Adjust the sleep time as needed
     except KeyboardInterrupt:
         print("Stopping device monitoring...")

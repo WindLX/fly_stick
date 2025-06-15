@@ -1,4 +1,4 @@
-use pyo3::prelude::*;
+use pyo3::{prelude::*, types::PyDict};
 use std::collections::HashMap;
 
 /// Joystick information containing path and name
@@ -53,6 +53,33 @@ impl JoystickState {
 
     pub fn __eq__(&self, other: &Self) -> bool {
         self == other
+    }
+
+    pub fn to_dict(&self, py: Python) -> PyResult<PyObject> {
+        let dict = PyDict::new(py);
+
+        // Convert axes
+        let axes_dict = PyDict::new(py);
+        for (code, value) in &self.axes {
+            axes_dict.set_item(*code, *value)?;
+        }
+        dict.set_item("axes", axes_dict)?;
+
+        // Convert buttons
+        let buttons_dict = PyDict::new(py);
+        for (code, value) in &self.buttons {
+            buttons_dict.set_item(*code, *value)?;
+        }
+        dict.set_item("buttons", buttons_dict)?;
+
+        // Convert hats
+        let hats_dict = PyDict::new(py);
+        for (code, value) in &self.hats {
+            hats_dict.set_item(*code, *value)?;
+        }
+        dict.set_item("hats", hats_dict)?;
+
+        Ok(dict.into())
     }
 }
 

@@ -7,7 +7,9 @@ class JoystickState:
     buttons: dict[int, int]
     hats: dict[int, int]
 
+    def __init__(self) -> None: ...
     def __eq__(self, value: object) -> bool: ...
+    def to_dict(self) -> dict[str, dict[int, float | int]]: ...
 
 class JoystickInfo:
     """Joystick information containing path and name"""

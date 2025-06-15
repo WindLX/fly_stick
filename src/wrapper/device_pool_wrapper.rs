@@ -1,5 +1,4 @@
 use crate::inner::device_pool::DevicePool;
-use crate::utils::JoystickState;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3_async_runtimes::tokio::future_into_py;
@@ -41,8 +40,7 @@ impl PyDevicePool {
                 Ok(state_map) => {
                     let dict = PyDict::new(py);
                     for (device_name, state) in state_map {
-                        let py_state = joystick_state_to_py(py, &state)?;
-                        dict.set_item(device_name, py_state)?;
+                        dict.set_item(device_name, state)?;
                     }
                     Ok(dict.into())
                 }
@@ -66,8 +64,7 @@ impl PyDevicePool {
                 Ok(state_map) => Python::with_gil(|py| {
                     let dict = PyDict::new(py);
                     for (device_name, state) in state_map {
-                        let py_state = joystick_state_to_py(py, &state)?;
-                        dict.set_item(device_name, py_state)?;
+                        dict.set_item(device_name, state)?;
                     }
                     Ok(dict.into())
                 }),
@@ -84,31 +81,4 @@ impl PyDevicePool {
             Ok(())
         })
     }
-}
-
-fn joystick_state_to_py(py: Python, state: &JoystickState) -> PyResult<PyObject> {
-    let dict = PyDict::new(py);
-
-    // Convert axes
-    let axes_dict = PyDict::new(py);
-    for (code, value) in &state.axes {
-        axes_dict.set_item(*code, *value)?;
-    }
-    dict.set_item("axes", axes_dict)?;
-
-    // Convert buttons
-    let buttons_dict = PyDict::new(py);
-    for (code, value) in &state.buttons {
-        buttons_dict.set_item(*code, *value)?;
-    }
-    dict.set_item("buttons", buttons_dict)?;
-
-    // Convert hats
-    let hats_dict = PyDict::new(py);
-    for (code, value) in &state.hats {
-        hats_dict.set_item(*code, *value)?;
-    }
-    dict.set_item("hats", hats_dict)?;
-
-    Ok(dict.into())
 }
