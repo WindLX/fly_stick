@@ -1,5 +1,13 @@
 from typing import Optional
 
+class JoystickInfo:
+    """Joystick information containing path and name"""
+
+    path: str
+    name: str
+
+    def __init__(self, path: str, name: str) -> None: ...
+
 class JoystickState:
     """Complete joystick state containing axes, buttons, and hats"""
 
@@ -9,15 +17,28 @@ class JoystickState:
 
     def __init__(self) -> None: ...
     def __eq__(self, value: object) -> bool: ...
-    def to_dict(self) -> dict[str, dict[int, float | int]]: ...
+    def __repr__(self) -> str: ...
+    def to_dict(self) -> dict[str, dict[int, float | int]]:
+        """Convert joystick state to a dictionary representation keyed by code"""
+        ...
 
-class JoystickInfo:
-    """Joystick information containing path and name"""
+    def to_alias_dict(
+        self, desc: DeviceDescription
+    ) -> dict[str, dict[str, float | int]]:
+        """Convert joystick state to a dictionary representation keyed by alias"""
+        ...
 
-    path: str
-    name: str
+    def get_alias_axes(self, desc: DeviceDescription) -> dict[str, float]:
+        """Get axes values keyed by alias"""
+        ...
 
-    def __init__(self, path: str, name: str) -> None: ...
+    def get_alias_buttons(self, desc: DeviceDescription) -> dict[str, int]:
+        """Get buttons values keyed by alias"""
+        ...
+
+    def get_alias_hats(self, desc: DeviceDescription) -> dict[str, int]:
+        """Get hats values keyed by alias"""
+        ...
 
 def fetch_connected_joysticks() -> list[JoystickInfo]:
     """
@@ -29,6 +50,33 @@ def fetch_connected_joysticks() -> list[JoystickInfo]:
         Device list, each element is a tuple of (device_path, device_name)
     """
     ...
+
+class DeviceButtonMode:
+    """Represents the mode of operation for device buttons in the DevicePool.
+    This enum defines how button presses are handled:
+    - `Trigger`: The button press is registered only when the button is pressed down, then the state will be reset immediately after.
+      This mode is suitable for actions that should only occur once per press, such as firing a shot or triggering an event.
+      The button state will not remain active after the initial press.
+    - `Hold`: The button press is registered continuously while the button is held down.
+    ///This enum is used to configure the behavior of buttons in the DevicePool,
+    allowing for different interaction styles depending on the application requirements.
+    The mode can be set when creating a DevicePool instance,
+    and it affects how button events are processed during input handling."""
+
+    def __init__(self, mode: str) -> None:
+        """Initialize DeviceButtonMode with a string mode, string must be one of:
+        - "trigger"
+        - "hold"
+        """
+        ...
+
+    @staticmethod
+    def trigger() -> "DeviceButtonMode": ...
+    @staticmethod
+    def hold() -> "DeviceButtonMode": ...
+    def __str__(self) -> str: ...
+    def __repr__(self) -> str: ...
+    def __eq__(self, other: object) -> bool: ...
 
 class DeviceItem:
     """Device item with code and optional alias"""
@@ -150,7 +198,10 @@ class PyDevicePool:
     """Device pool for managing joystick states"""
 
     def __init__(
-        self, device_desc_files: list[str], debounce_seconds: float = 0.1
+        self,
+        device_desc_files: list[str],
+        debounce_seconds: float = 0.1,
+        btn_mode: DeviceButtonMode = DeviceButtonMode.trigger(),
     ) -> None: ...
     async def reset(self) -> None:
         """Reset all devices in the pool to their initial state.
@@ -227,3 +278,42 @@ class PyDevicePool:
             >>> print("Device pool stopped successfully.")
         """
         ...
+
+    def get_device_description_by_index(self, index: int) -> DeviceDescription:
+        """
+        Retrieve a device description by its index in the devices vector.
+
+        Args:
+            index (int): The index of the device description to retrieve.
+
+        Returns:
+            DeviceDescription: The device description if found.
+
+        Raises:
+            IndexError: If the index is out of range of the devices vector.
+        """
+        ...
+
+    def get_device_description(self, device_name: str) -> DeviceDescription:
+        """
+        Retrieve a device description by its name.
+
+        Args:
+            device_name (str): The name of the device to retrieve.
+
+        Returns:
+            DeviceDescription: The device description if found.
+
+        Raises:
+            KeyError: If no device with the given name exists in the devices vector.
+        """
+        ...
+
+    @property
+    def debounce_time(self) -> float: ...
+    @property
+    def device_descriptions(self) -> list[DeviceDescription]: ...
+    @property
+    def btn_mode(self) -> DeviceButtonMode: ...
+    @btn_mode.setter
+    def btn_mode(self, mode: DeviceButtonMode) -> None: ...

@@ -195,27 +195,37 @@ alias = "ABS_HAT0Y"
 
 ### 核心函数
 
-- [`fetch_connected_devices()`](src/utils.rs) - 获取所有连接的游戏控制器设备
+- [`fetch_connected_joysticks()`](src/utils.rs) - 获取所有连接的游戏控制器设备
 - [`PyJoystick(device_path)`](src/wrapper/joystick_wrapper.rs) - 创建操纵杆实例
 - [`PyJoystick.get_state()`](src/wrapper/joystick_wrapper.rs) - 获取设备当前状态
 
+### 数据结构
+
+- [`JoystickInfo`](src/utils.rs) - 操纵杆信息，包含路径和名称
+- [`JoystickState`](src/utils.rs) - 操纵杆状态，包含 axes、buttons、hats
+
 ### 设备池类
 
-- [`DevicePool`](src/fly_stick/device_pool.py) - 多设备管理器
-- [`DevicePool.fetch(timeout)`](src/fly_stick/device_pool.py) - 异步获取设备状态
-- [`DevicePool.fetch_nowait()`](src/fly_stick/device_pool.py) - 同步获取设备状态
-- [`DevicePool.reset()`](src/fly_stick/device_pool.py) - 重置设备池状态
+- [`PyDevicePool`](src/fly_stick/device_pool.py) - 多设备管理器
+- [`PyDevicePool.fetch(timeout_seconds)`](src/fly_stick/device_pool.py) - 异步获取设备状态
+- [`PyDevicePool.fetch_nowait()`](src/fly_stick/device_pool.py) - 同步获取设备状态
+- [`PyDevicePool.reset()`](src/fly_stick/device_pool.py) - 重置设备池状态
+- [`PyDevicePool.stop()`](src/fly_stick/device_pool.py) - 停止设备池并清理资源
+- [`PyDevicePool.get_device_description_by_index(index)`](src/fly_stick/device_pool.py) - 根据索引获取设备描述
+- [`PyDevicePool.get_device_description(device_name)`](src/fly_stick/device_pool.py) - 根据名称获取设备描述
 
 ### 设备描述
 
 - [`DeviceDescription`](src/inner/description.rs) - 设备配置描述类
-- [`DeviceItem`](src/inner/description.rs) - 设备项配置
-- [`DeviceDescription.from_toml_rust(path)`](src/inner/description.rs) - 从 TOML 文件加载配置
+- [`DeviceDescription.from_toml(toml_file)`](src/inner/description.rs) - 从 TOML 文件加载配置
+- [`DeviceDescription.build_state()`](src/inner/description.rs) - 从设备描述构建状态
+- [`DeviceItem`](src/inner/description.rs) - 设备项配置，包含 code 和 alias
 
-### 数据结构
+### 按钮模式
 
-- [`JoystickState`](src/utils.rs) - 操纵杆状态，包含 axes、buttons、hats
-- [`JoystickInfo`](src/utils.rs) - 操纵杆信息，包含路径和名称
+- [`DeviceButtonMode.trigger()`](src/fly_stick/device_pool.py) - 按钮触发模式
+- [`DeviceButtonMode.hold()`](src/fly_stick/device_pool.py) - 按钮保持模式
+- [`DeviceButtonMode`](src/fly_stick/device_pool.py) - 按钮模式类，用于配置按钮交互行为
 
 ## 示例
 
@@ -225,17 +235,19 @@ alias = "ABS_HAT0Y"
 - [examples/multi_device.py](examples/multi_device.py) - 多设备监控
 - [examples/device_pool.py](examples/device_pool.py) - 同步设备池使用
 - [examples/device_pool_block.py](examples/device_pool_block.py) - 阻塞式设备池使用
+- [examples/alias.py](examples/alias.py) - 使用别名访问按键
+- [examples/btn_mode.py](examples/btn_mode.py) - 切换按键触发模式
 
 ## 支持的设备
 
 目前已测试的设备：
 
-- **Thrustmaster T.A.320 Copilot** - 空客 A320 副驾驶侧杆
-- **Thrustmaster TWCS Throttle** - 推力控制系统
+- **Thrustmaster T.A.320 Copilot**
+- **Thrustmaster TWCS Throttle**
 
-配置文件位于 [devices/thrustmaster/](devices/thrustmaster/) 目录：
-- [devices/thrustmaster/ta320.toml](devices/thrustmaster/ta320.toml)
-- [devices/thrustmaster/twcs.toml](devices/thrustmaster/twcs.toml)
+配置文件位于 [devices/Thrustmaster/](devices/Thrustmaster/) 目录：
+- [devices/Thrustmaster/ta320.toml](devices/Thrustmaster/ta320.toml)
+- [devices/Thrustmaster/twcs.toml](devices/Thrustmaster/twcs.toml)
 
 ### 设备映射图
 
@@ -305,6 +317,11 @@ maturin build --release
 - **防抖动**: 内置按钮防抖动机制，避免误触发
 - **非阻塞**: evdev 非阻塞模式，不会阻塞主线程
 - **内存安全**: Rust 的内存安全保证，避免内存泄漏
+
+## TODO
+
+- [x] `alias` 支持
+- [x] 按钮触发逻辑优化
 
 ## 许可证
 

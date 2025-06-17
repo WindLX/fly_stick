@@ -31,7 +31,7 @@ async def monitor_device(device_path: str, device_name: str) -> None:
 
             # Only print status when there are changes
             if axes or buttons or hats:
-                print(f"[{device_name}] axes: {axes}, buttons: {buttons}, hats: {hats}")
+                print(f"[{device_name}], buttons: {buttons}, hats: {hats}")
 
             # Use async sleep
             await asyncio.sleep(0.01)

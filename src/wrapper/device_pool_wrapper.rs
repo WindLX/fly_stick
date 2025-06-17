@@ -1,4 +1,6 @@
+use crate::inner::description::DeviceDescription;
 use crate::inner::device_pool::DevicePool;
+use crate::utils::DeviceButtonMode;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3_async_runtimes::tokio::future_into_py;
@@ -14,15 +16,19 @@ pub struct PyDevicePool {
 #[pymethods]
 impl PyDevicePool {
     #[new]
-    #[pyo3(signature = (device_desc_files = Vec::new(), debounce_seconds = 0.1))]
-    fn new(device_desc_files: Vec<String>, debounce_seconds: f64) -> Self {
-        let pool = DevicePool::new(device_desc_files, debounce_seconds);
+    #[pyo3(signature = (device_desc_files = Vec::new(), debounce_seconds = 0.1, btn_mode = DeviceButtonMode::Trigger))]
+    pub fn new(
+        device_desc_files: Vec<String>,
+        debounce_seconds: f64,
+        btn_mode: DeviceButtonMode,
+    ) -> Self {
+        let pool = DevicePool::new(device_desc_files, debounce_seconds, btn_mode);
         Self {
             inner: Arc::new(Mutex::new(pool)),
         }
     }
 
-    fn reset<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    pub fn reset<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let inner = Arc::clone(&self.inner);
         future_into_py(py, async move {
             let mut pool = inner.lock().await;
@@ -31,7 +37,7 @@ impl PyDevicePool {
         })
     }
 
-    fn fetch_nowait(&self, py: Python) -> PyResult<PyObject> {
+    pub fn fetch_nowait(&self, py: Python) -> PyResult<PyObject> {
         let inner = Arc::clone(&self.inner);
 
         pyo3_async_runtimes::tokio::get_runtime().block_on(async {
@@ -50,7 +56,7 @@ impl PyDevicePool {
     }
 
     #[pyo3(signature = (timeout_seconds = None))]
-    fn fetch<'py>(
+    pub fn fetch<'py>(
         &self,
         py: Python<'py>,
         timeout_seconds: Option<f64>,
@@ -73,12 +79,75 @@ impl PyDevicePool {
         })
     }
 
-    fn stop<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    pub fn stop<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let inner = Arc::clone(&self.inner);
         future_into_py(py, async move {
             let mut pool = inner.lock().await;
             pool.stop().await;
             Ok(())
+        })
+    }
+
+    pub fn get_device_description_by_index(&self, index: usize) -> PyResult<DeviceDescription> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::get_runtime().block_on(async {
+            let pool = inner.lock().await;
+            match pool.get_device_description_by_index(index) {
+                Some(desc) => Ok(desc.clone()),
+                None => Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(
+                    "Device description not found",
+                )),
+            }
+        })
+    }
+
+    pub fn get_device_description(&self, device_name: &str) -> PyResult<DeviceDescription> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::get_runtime().block_on(async {
+            let pool = inner.lock().await;
+            match pool.get_device_description(device_name) {
+                Some(desc) => Ok(desc.clone()),
+                None => Err(PyErr::new::<pyo3::exceptions::PyKeyError, _>(
+                    "Device description not found",
+                )),
+            }
+        })
+    }
+
+    #[getter]
+    pub fn debounce_time(&self) -> f64 {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::get_runtime().block_on(async {
+            let pool = inner.lock().await;
+            pool.get_debounce_time().as_secs_f64()
+        })
+    }
+
+    #[getter]
+    pub fn button_mode(&self) -> DeviceButtonMode {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::get_runtime().block_on(async {
+            let pool = inner.lock().await;
+            pool.get_btn_mode()
+        })
+    }
+
+    #[setter]
+    pub fn set_button_mode(&self, mode: DeviceButtonMode) -> PyResult<()> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::get_runtime().block_on(async {
+            let mut pool = inner.lock().await;
+            pool.set_btn_mode(mode);
+            Ok(())
+        })
+    }
+
+    #[getter]
+    pub fn device_descriptions(&self) -> PyResult<Vec<DeviceDescription>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::get_runtime().block_on(async {
+            let pool = inner.lock().await;
+            Ok(pool.get_device_descriptions().to_vec())
         })
     }
 }

@@ -1,6 +1,6 @@
 use crate::inner::description::DeviceDescription;
 use crate::inner::joystick::Joystick;
-use crate::utils::{fetch_connected_joysticks, JoystickState};
+use crate::utils::{fetch_connected_joysticks, DeviceButtonMode, JoystickState};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -31,6 +31,7 @@ pub struct DevicePool {
     last_button_time: Arc<Mutex<HashMap<u16, Instant>>>,
     running: Arc<Mutex<bool>>,
     shutdown_tx: Option<mpsc::Sender<()>>,
+    btn_mode: DeviceButtonMode,
 }
 
 /// Implementation of the DevicePool with methods for managing devices and input states.
@@ -46,10 +47,15 @@ impl DevicePool {
     ///
     /// # Arguments
     /// * `debounce_seconds` - The debounce time in seconds as a floating-point value
+    /// * `btn_mode` - The mode for button handling, either Trigger or Hold
     ///
     /// # Returns
     /// A new `DevicePool` instance ready for device management and input processing
-    pub fn new(device_desc_files: Vec<String>, debounce_seconds: f64) -> Self {
+    pub fn new(
+        device_desc_files: Vec<String>,
+        debounce_seconds: f64,
+        btn_mode: DeviceButtonMode,
+    ) -> Self {
         let mut pool = Self {
             debounce_time: Duration::from_secs_f64(debounce_seconds),
             devices: Vec::new(),
@@ -58,9 +64,26 @@ impl DevicePool {
             last_button_time: Arc::new(Mutex::new(HashMap::new())),
             running: Arc::new(Mutex::new(false)),
             shutdown_tx: None,
+            btn_mode,
         };
         pool.build_state(device_desc_files);
         pool
+    }
+
+    pub fn get_debounce_time(&self) -> Duration {
+        self.debounce_time
+    }
+
+    pub fn get_btn_mode(&self) -> DeviceButtonMode {
+        self.btn_mode
+    }
+
+    pub fn set_btn_mode(&mut self, mode: DeviceButtonMode) {
+        self.btn_mode = mode;
+    }
+
+    pub fn get_device_descriptions(&self) -> &[DeviceDescription] {
+        &self.devices
     }
 
     /// Resets the device pool by stopping any ongoing monitoring,
@@ -113,7 +136,16 @@ impl DevicePool {
             *last_input_register = current_input.clone();
         }
 
-        self.reset_trigger_register();
+        match self.btn_mode {
+            DeviceButtonMode::Trigger => {
+                // Reset trigger register logic for trigger mode
+                self.reset_trigger_register();
+            }
+            DeviceButtonMode::Hold => {
+                // Reset trigger register logic for hold mode
+            }
+        }
+
         Ok(current_input)
     }
 
@@ -164,7 +196,17 @@ impl DevicePool {
                     let mut last_input_register = self.last_input_register.lock().unwrap();
                     *last_input_register = current_input.clone();
                 }
-                self.reset_trigger_register();
+
+                match self.btn_mode {
+                    DeviceButtonMode::Trigger => {
+                        // Reset trigger register logic for trigger mode
+                        self.reset_trigger_register();
+                    }
+                    DeviceButtonMode::Hold => {
+                        // Reset trigger register logic for hold mode
+                    }
+                }
+
                 return Ok(current_input);
             }
 
@@ -476,22 +518,57 @@ impl DevicePool {
         true
     }
 
-    /// Starts monitoring the devices for input changes.
+    /// Stops the device pool monitoring and cleans up resources.
     ///
-    /// This method checks if the device pool is already running. If not, it starts monitoring
-    /// the devices by calling `start_monitoring()`. It returns a vector of device names that are
-    /// currently connected and registered in the input register.
+    /// This method is intended to be called when the application is shutting down
+    /// or when the device pool is no longer needed. It ensures that all monitoring tasks
+    /// are stopped and resources are released gracefully.
     ///
-    /// # Returns
-    /// A vector of strings containing the names of devices that are currently connected
-    /// and registered in the input register.
     /// # Example
     /// ```rust
     /// let mut pool = DevicePool::new(vec!["device1.toml".to_string()], 0.1);
-    /// let connected_devices = pool.start().await;
+    /// pool.stop().await;
     /// ```
+    /// # Returns
+    /// An empty `Future` that resolves when the monitoring has been stopped.
+    ///
+    /// This method does not return any value, as it is primarily used for cleanup.
+    /// It is an asynchronous operation that ensures all monitoring tasks are stopped
+    /// and resources are released properly.
     pub async fn stop(&mut self) {
         self.stop_monitoring().await;
+    }
+
+    /// Retrieves a device description by its index in the devices vector.
+    ///
+    /// This method allows access to the device descriptions stored in the pool,
+    /// enabling users to get information about a specific device based on its index.
+    ///
+    /// # Arguments
+    /// * `index` - The index of the device description to retrieve.
+    ///
+    /// # Returns
+    /// An `Option` containing a reference to the `DeviceDescription` if found,
+    /// or `None` if the index is out of bounds.
+    pub fn get_device_description_by_index(&self, index: usize) -> Option<&DeviceDescription> {
+        self.devices.get(index)
+    }
+
+    /// Retrieves a device description by its name.
+    ///
+    /// This method allows access to the device descriptions stored in the pool,
+    /// enabling users to get information about a specific device based on its name.
+    ///
+    /// # Arguments
+    /// * `device_name` - The name of the device to retrieve.
+    ///
+    /// # Returns
+    /// An `Option` containing a reference to the `DeviceDescription` if found,
+    /// or `None` if no device with the given name exists in the pool.
+    pub fn get_device_description(&self, device_name: &str) -> Option<&DeviceDescription> {
+        self.devices
+            .iter()
+            .find(|desc| desc.device_name == device_name)
     }
 }
 

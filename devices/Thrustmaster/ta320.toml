@@ -82,6 +82,10 @@ code = 302
 code = 303
 alias = "BTN_DEAD"
 
+[[buttons]]
+code = 704
+alias = "BTN_TRIGGER_HAPPY1"
+
 # Hats
 [[hats]]
 code = 16

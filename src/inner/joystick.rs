@@ -86,14 +86,14 @@ impl Joystick {
     /// Fetches all pending events from the device and processes them to determine
     /// the current state of axes, buttons, and hat switches. Axes values are normalized
     /// to the range [-1.0, 1.0]. Button values are 0 (released) or 1 (pressed).
-    /// Hat switches return tuples of (x, y) values.
+    /// Hat switches return -1, 0, or 1 for each axis depending on their position.
     ///
     /// # Returns
     ///
     /// Returns a JoystickState containing:
     /// * axes: Maps axis codes to normalized float values [-1.0, 1.0]
     /// * buttons: Maps button codes to integer values (0 or 1)
-    /// * hats: Maps hat codes to tuples of (x, y) integer values
+    /// * hats: Maps hat codes to integer values (-1, 0, or 1)
     ///
     /// # Errors
     ///

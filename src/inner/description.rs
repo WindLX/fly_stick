@@ -58,7 +58,7 @@ pub struct DeviceItem {
 /// ```
 impl DeviceItem {
     #[new]
-    fn new(code: u16, alias: Option<String>) -> Self {
+    pub fn new(code: u16, alias: Option<String>) -> Self {
         Self { code, alias }
     }
 }
@@ -146,7 +146,7 @@ fn default_device_name() -> String {
 /// ```
 impl DeviceDescription {
     #[new]
-    fn new(
+    pub fn new(
         device_name: Option<String>,
         author: Option<String>,
         created: Option<String>,

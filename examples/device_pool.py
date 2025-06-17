@@ -11,8 +11,8 @@ async def main():
     # Create a device pool with default settings
     device_pool = PyDevicePool(
         [
-            "devices/thrustmaster/ta320.toml",
-            "devices/thrustmaster/twcs.toml",
+            "devices/Thrustmaster/ta320.toml",
+            "devices/Thrustmaster/twcs.toml",
         ],
         debounce_seconds=0.1,
     )

@@ -6,6 +6,7 @@ from fly_stick._core import (
     fetch_connected_joysticks,
     DeviceItem,
     DeviceDescription,
+    DeviceButtonMode,
 )
 
 __all__ = [
@@ -16,5 +17,6 @@ __all__ = [
     "fetch_connected_joysticks",
     "DeviceItem",
     "DeviceDescription",
+    "DeviceButtonMode",
     "PyDevicePool",
 ]

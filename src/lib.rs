@@ -11,6 +11,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_class::<utils::JoystickInfo>()?;
     m.add_class::<utils::JoystickState>()?;
+    m.add_class::<utils::DeviceButtonMode>()?;
     m.add_function(wrap_pyfunction!(utils::fetch_connected_joysticks, m)?)?;
 
     m.add_class::<inner::description::DeviceItem>()?;

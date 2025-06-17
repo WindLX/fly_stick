@@ -1,0 +1,73 @@
+device_name = "Microsoft X-Box 360 pad"
+author = "WindLX"
+created = "2025-06-16"
+description = "Microsoft X-Box 360 pad Device Description File"
+
+# Axes
+[[axes]]
+code = 0
+alias = "ABS_X"
+
+[[axes]]
+code = 1
+alias = "ABS_Y"
+
+[[axes]]
+code = 2
+
+[[axes]]
+code = 3
+
+[[axes]]
+code = 4
+
+[[axes]]
+code = 5
+alias = "ABS_RZ"
+
+[[axes]]
+code = 6
+alias = "ABS_THROTTLE"
+
+# Buttons
+[[buttons]]
+code = 304
+
+[[buttons]]
+code = 305
+
+[[buttons]]
+code = 307
+
+[[buttons]]
+code = 308
+
+[[buttons]]
+code = 310
+
+[[buttons]]
+code = 311
+
+[[buttons]]
+code = 314
+
+[[buttons]]
+code = 315
+
+[[buttons]]
+code = 316
+
+[[buttons]]
+code = 317
+
+[[buttons]]
+code = 318
+
+# Hats
+[[hats]]
+code = 16
+alias = "ABS_HAT0X"
+
+[[hats]]
+code = 17
+alias = "ABS_HAT0Y"
