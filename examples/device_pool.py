@@ -1,7 +1,7 @@
 import asyncio
 
 from rich.pretty import pprint
-from fly_stick import PyDevicePool
+from fly_stick import PyDevicePool, DeviceDescription
 
 
 async def main():
@@ -9,11 +9,13 @@ async def main():
     Demonstrate how to use the DevicePool class to monitor multiple fly_stick devices.
     """
     # Create a device pool with default settings
+    descs = {
+        "ta320": DeviceDescription.from_toml("devices/Thrustmaster/ta320.toml"),
+        "twcs": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
+    }
+
     device_pool = PyDevicePool(
-        [
-            "devices/Thrustmaster/ta320.toml",
-            "devices/Thrustmaster/twcs.toml",
-        ],
+        descs,
         debounce_seconds=0.1,
     )
 

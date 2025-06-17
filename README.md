@@ -90,10 +90,11 @@ from fly_stick import DevicePool
 async def monitor_device_pool():
     # 使用设备描述文件初始化设备池
     pool = DevicePool(
-        device_desc_files=[
-            "devices/thrustmaster/ta320.toml",
-            "devices/thrustmaster/twcs.toml"
-        ],
+        descs = {
+            "ta320": DeviceDescription.from_toml("devices/Thrustmaster/ta320.toml"),
+            "twcs": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
+            "twcs2": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
+        },
         debounce_time=0.1  # 100ms 防抖动时间
     )
 
@@ -120,7 +121,11 @@ from fly_stick import DevicePool
 
 # 初始化设备池
 pool = DevicePool(
-    device_desc_files=["devices/thrustmaster/ta320.toml"],
+    descs = {
+        "ta320": DeviceDescription.from_toml("devices/Thrustmaster/ta320.toml"),
+        "twcs": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
+        "twcs2": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
+    },
     debounce_time=0.1
 )
 

@@ -1,6 +1,6 @@
 use crate::inner::description::DeviceDescription;
 use crate::inner::joystick::Joystick;
-use crate::utils::{fetch_connected_joysticks, DeviceButtonMode, JoystickState};
+use crate::utils::{fetch_connected_joysticks, DeviceButtonMode, JoystickInfo, JoystickState};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -25,10 +25,10 @@ use tokio::time::sleep;
 /// across multiple threads.
 pub struct DevicePool {
     debounce_time: Duration,
-    devices: Vec<DeviceDescription>,
+    devices: Arc<HashMap<String, (DeviceDescription, JoystickInfo)>>,
     input_register: Arc<Mutex<HashMap<String, JoystickState>>>,
     last_input_register: Arc<Mutex<HashMap<String, JoystickState>>>,
-    last_button_time: Arc<Mutex<HashMap<u16, Instant>>>,
+    last_button_time: Arc<Mutex<HashMap<String, HashMap<u16, Instant>>>>,
     running: Arc<Mutex<bool>>,
     shutdown_tx: Option<mpsc::Sender<()>>,
     btn_mode: DeviceButtonMode,
@@ -46,28 +46,62 @@ impl DevicePool {
     /// - Configures running state and shutdown channel as None (not started)
     ///
     /// # Arguments
+    /// * `device_descs` - A `HashMap` containing device names and their corresponding `DeviceDescription`
+    ///   instances, which define the properties and capabilities of each device.
     /// * `debounce_seconds` - The debounce time in seconds as a floating-point value
     /// * `btn_mode` - The mode for button handling, either Trigger or Hold
     ///
     /// # Returns
     /// A new `DevicePool` instance ready for device management and input processing
     pub fn new(
-        device_desc_files: Vec<String>,
+        device_descs: HashMap<String, DeviceDescription>,
         debounce_seconds: f64,
         btn_mode: DeviceButtonMode,
     ) -> Self {
-        let mut pool = Self {
+        let mut devices = HashMap::new();
+        let device_infos = fetch_connected_joysticks();
+        let mut available_devices = device_infos.clone();
+
+        for (logical_name, desc) in &device_descs {
+            // 找到所有匹配设备名称的物理设备
+            let matching_devices: Vec<_> = available_devices
+                .iter()
+                .enumerate()
+                .filter(|(_, info)| info.name == desc.device_name)
+                .collect();
+
+            if matching_devices.is_empty() {
+                eprintln!("Device '{}' not found", desc.device_name);
+                continue;
+            }
+
+            // 选择第一个匹配的设备并移除
+            if let Some((index, device_info)) = matching_devices.first() {
+                devices.insert(logical_name.clone(), (desc.clone(), (*device_info).clone()));
+                available_devices.remove(*index);
+            }
+        }
+
+        let input_register = devices
+            .iter()
+            .map(|(name, (desc, _info))| (name.clone(), desc.build_state()))
+            .collect::<HashMap<String, JoystickState>>();
+
+        let last_button_time = devices
+            .keys()
+            .map(|name| (name.clone(), HashMap::new()))
+            .collect::<HashMap<String, HashMap<u16, Instant>>>();
+
+        Self {
             debounce_time: Duration::from_secs_f64(debounce_seconds),
-            devices: Vec::new(),
-            input_register: Arc::new(Mutex::new(HashMap::new())),
-            last_input_register: Arc::new(Mutex::new(HashMap::new())),
-            last_button_time: Arc::new(Mutex::new(HashMap::new())),
+            devices: Arc::new(devices),
+            input_register: Arc::new(Mutex::new(input_register.clone())),
+            last_input_register: Arc::new(Mutex::new(input_register)),
+            last_button_time: Arc::new(Mutex::new(last_button_time)),
             running: Arc::new(Mutex::new(false)),
             shutdown_tx: None,
             btn_mode,
-        };
-        pool.build_state(device_desc_files);
-        pool
+        }
     }
 
     pub fn get_debounce_time(&self) -> Duration {
@@ -82,7 +116,7 @@ impl DevicePool {
         self.btn_mode = mode;
     }
 
-    pub fn get_device_descriptions(&self) -> &[DeviceDescription] {
+    pub fn get_devices(&self) -> &HashMap<String, (DeviceDescription, JoystickInfo)> {
         &self.devices
     }
 
@@ -94,7 +128,7 @@ impl DevicePool {
     ///
     /// # Returns
     /// A vector of device names that are currently connected and monitored.
-    pub async fn reset(&mut self) -> Vec<String> {
+    pub async fn reset(&mut self) -> HashMap<String, (DeviceDescription, JoystickInfo)> {
         self.stop_monitoring().await;
         self.reset_input_register();
         {
@@ -102,7 +136,7 @@ impl DevicePool {
             last_button_time.clear();
         }
         self.start_monitoring().await;
-        self.check_devices()
+        (*self.devices).clone()
     }
 
     /// Fetches the current input state without waiting for changes.
@@ -220,36 +254,6 @@ impl DevicePool {
         }
     }
 
-    /// Builds the device pool state from the provided device description files.
-    ///
-    /// This method reads the device descriptions from the specified files,
-    /// initializes the input register with the device states, and populates
-    /// the devices vector with the parsed device descriptions.
-    ///
-    /// # Arguments
-    /// * `device_desc_files` - A vector of strings representing the paths to the device description files.
-    ///
-    /// # Example
-    /// ```rust
-    /// let device_desc_files = vec!["device1.toml".to_string(), "device2.toml".to_string()];
-    /// let mut pool = DevicePool::new(device_desc_files, 0.1);
-    /// pool.build_state(device_desc_files);
-    /// ```
-    fn build_state(&mut self, device_desc_files: Vec<String>) {
-        self.devices.clear();
-        let mut input_register = self.input_register.lock().unwrap();
-        input_register.clear();
-
-        for desc_file in device_desc_files {
-            if let Ok(desc) = DeviceDescription::from_toml(&desc_file) {
-                let device_name = desc.device_name.clone();
-                let state = desc.build_state();
-                input_register.insert(device_name, state);
-                self.devices.push(desc);
-            }
-        }
-    }
-
     /// Resets the input register to the initial state based on the device descriptions.
     ///
     /// This method initializes the input register with the default states of all devices
@@ -265,9 +269,9 @@ impl DevicePool {
         let mut input_register = self.input_register.lock().unwrap();
         let mut last_input_register = self.last_input_register.lock().unwrap();
 
-        for desc in &self.devices {
+        for (name, (desc, _info)) in self.devices.as_ref() {
             let state = desc.build_state();
-            input_register.insert(desc.device_name.clone(), state.clone());
+            input_register.insert(name.clone(), state);
         }
         *last_input_register = input_register.clone();
     }
@@ -292,36 +296,6 @@ impl DevicePool {
                 *hat_value = 0;
             }
         }
-    }
-
-    /// Checks the currently connected devices against the input register.
-    ///
-    /// This method fetches the list of connected joysticks and compares them
-    /// with the input register. It returns a vector of device names that are
-    /// currently registered in the input register.
-    ///
-    /// # Returns
-    /// A vector of strings containing the names of devices that are currently connected
-    /// and registered in the input register.
-    /// # Example
-    /// ```rust
-    /// let pool = DevicePool::new(vec!["device1.toml".to_string()], 0.1);
-    /// let connected_devices = pool.check_devices();
-    /// ```
-    fn check_devices(&self) -> Vec<String> {
-        let devices = fetch_connected_joysticks();
-        let input_register = self.input_register.lock().unwrap();
-
-        devices
-            .into_iter()
-            .filter_map(|device_info| {
-                if input_register.contains_key(&device_info.name) {
-                    Some(device_info.name)
-                } else {
-                    None
-                }
-            })
-            .collect()
     }
 
     /// Starts monitoring the connected devices for input changes.
@@ -350,30 +324,32 @@ impl DevicePool {
         let last_button_time = Arc::clone(&self.last_button_time);
         let running = Arc::clone(&self.running);
         let debounce_time = self.debounce_time;
+        let devices = Arc::clone(&self.devices);
+
+        let mut tasks = Vec::new();
+
+        for (name, (_desc, info)) in devices.as_ref() {
+            let input_register_clone = Arc::clone(&input_register);
+            let last_button_time_clone = Arc::clone(&last_button_time);
+            let running_clone = Arc::clone(&running);
+            let device_path = info.path.clone();
+            let device_name = name.clone();
+
+            let task = tokio::spawn(async move {
+                Self::monitor_device(
+                    &device_path,
+                    &device_name,
+                    input_register_clone,
+                    last_button_time_clone,
+                    running_clone,
+                    debounce_time,
+                )
+                .await;
+            });
+            tasks.push(task);
+        }
 
         tokio::spawn(async move {
-            let devices = fetch_connected_joysticks();
-            let mut tasks = Vec::new();
-
-            for device_info in devices {
-                let input_register_clone = Arc::clone(&input_register);
-                let last_button_time_clone = Arc::clone(&last_button_time);
-                let running_clone = Arc::clone(&running);
-
-                let task = tokio::spawn(async move {
-                    Self::monitor_device(
-                        device_info.path,
-                        device_info.name,
-                        input_register_clone,
-                        last_button_time_clone,
-                        running_clone,
-                        debounce_time,
-                    )
-                    .await;
-                });
-                tasks.push(task);
-            }
-
             tokio::select! {
                 _ = shutdown_rx.recv() => {
                     for task in tasks {
@@ -432,14 +408,14 @@ impl DevicePool {
     /// DevicePool::monitor_device(device_path, device_name, input_register, last_button_time, running, debounce_time).await;
     /// ```
     async fn monitor_device(
-        device_path: String,
-        device_name: String,
+        device_path: &str,
+        device_name: &str,
         input_register: Arc<Mutex<HashMap<String, JoystickState>>>,
-        last_button_time: Arc<Mutex<HashMap<u16, Instant>>>,
+        last_button_time: Arc<Mutex<HashMap<String, HashMap<u16, Instant>>>>,
         running: Arc<Mutex<bool>>,
         debounce_time: Duration,
     ) {
-        let mut joystick = match Joystick::new(&device_path) {
+        let mut joystick = match Joystick::new(device_path) {
             Ok(js) => js,
             Err(e) => {
                 eprintln!("Failed to create joystick for {}: {}", device_name, e);
@@ -457,23 +433,27 @@ impl DevicePool {
 
                 let mut input_register = input_register.lock().unwrap();
 
-                if let Some(input_data) = input_register.get_mut(&device_name) {
+                let mut last_times_map = last_button_time.lock().unwrap();
+                let device_times = last_times_map
+                    .entry(device_name.to_string())
+                    .or_insert_with(HashMap::new);
+
+                if let Some(input_data) = input_register.get_mut(device_name) {
                     // Update axes
                     for (code, value) in axes {
                         input_data.axes.insert(code, value);
                     }
 
                     // Update buttons with debouncing
-                    // Update buttons with debouncing
                     for (code, value) in buttons {
-                        if Self::should_update_input(code, &last_button_time, debounce_time) {
+                        if Self::should_update_input(code, device_times, debounce_time) {
                             input_data.buttons.insert(code, value);
                         }
                     }
 
                     // Update hats with debouncing
                     for (code, value) in hats {
-                        if Self::should_update_input(code, &last_button_time, debounce_time) {
+                        if Self::should_update_input(code, device_times, debounce_time) {
                             input_data.hats.insert(code, value);
                         }
                     }
@@ -502,19 +482,18 @@ impl DevicePool {
     /// A boolean indicating whether the input should be updated (true) or ignored (false).
     fn should_update_input(
         code: u16,
-        last_button_time: &Arc<Mutex<HashMap<u16, Instant>>>,
+        device_times: &mut HashMap<u16, Instant>,
         debounce_time: Duration,
     ) -> bool {
-        let mut last_times = last_button_time.lock().unwrap();
         let now = Instant::now();
 
-        if let Some(&last_time) = last_times.get(&code) {
-            if now.duration_since(last_time) < debounce_time {
+        if let Some(last_time) = device_times.get(&code) {
+            if now.duration_since(*last_time) < debounce_time {
                 return false;
             }
         }
 
-        last_times.insert(code, now);
+        device_times.insert(code, now);
         true
     }
 
@@ -537,38 +516,6 @@ impl DevicePool {
     /// and resources are released properly.
     pub async fn stop(&mut self) {
         self.stop_monitoring().await;
-    }
-
-    /// Retrieves a device description by its index in the devices vector.
-    ///
-    /// This method allows access to the device descriptions stored in the pool,
-    /// enabling users to get information about a specific device based on its index.
-    ///
-    /// # Arguments
-    /// * `index` - The index of the device description to retrieve.
-    ///
-    /// # Returns
-    /// An `Option` containing a reference to the `DeviceDescription` if found,
-    /// or `None` if the index is out of bounds.
-    pub fn get_device_description_by_index(&self, index: usize) -> Option<&DeviceDescription> {
-        self.devices.get(index)
-    }
-
-    /// Retrieves a device description by its name.
-    ///
-    /// This method allows access to the device descriptions stored in the pool,
-    /// enabling users to get information about a specific device based on its name.
-    ///
-    /// # Arguments
-    /// * `device_name` - The name of the device to retrieve.
-    ///
-    /// # Returns
-    /// An `Option` containing a reference to the `DeviceDescription` if found,
-    /// or `None` if no device with the given name exists in the pool.
-    pub fn get_device_description(&self, device_name: &str) -> Option<&DeviceDescription> {
-        self.devices
-            .iter()
-            .find(|desc| desc.device_name == device_name)
     }
 }
 

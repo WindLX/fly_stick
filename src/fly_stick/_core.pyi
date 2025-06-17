@@ -175,7 +175,8 @@ class PyDevicePool:
     handling state fetching, and coordinating device interactions with built-in debouncing.
 
     Args:
-        device_desc_files: List of file paths containing device descriptions/configurations
+        device_descs: Dict of device descriptions keyed by device name.
+            Each description should be an instance of DeviceDescription.
         debounce_seconds: Time interval in seconds to debounce input events (default: 0.1)
 
     Methods:
@@ -185,7 +186,10 @@ class PyDevicePool:
         stop(): Gracefully stop the device pool and clean up resources
 
     Example:
-        >>> pool = PyDevicePool(['config1.toml', 'config2.toml'], debounce_seconds=0.05)
+        >>> pool = PyDevicePool({
+        ...     "ta320": DeviceDescription.from_toml("devices/Thrustmaster/ta320.toml"),
+        ...     "twcs": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
+        ... })
         >>> await pool.reset()
         >>> state = await pool.fetch(timeout_seconds=1.0)
         >>> await pool.stop()
@@ -199,15 +203,21 @@ class PyDevicePool:
 
     def __init__(
         self,
-        device_desc_files: list[str],
+        device_descs: dict[str, DeviceDescription],
         debounce_seconds: float = 0.1,
         btn_mode: DeviceButtonMode = DeviceButtonMode.trigger(),
     ) -> None: ...
-    async def reset(self) -> None:
+    async def reset(self) -> dict[str, tuple[DeviceDescription, JoystickInfo]]:
         """Reset all devices in the pool to their initial state.
         This method initializes all devices based on the provided device description files.
         It sets up the necessary event loops and prepares the devices for state fetching.
         This method should be called before any fetch operations to ensure devices are ready.
+        Returns:
+            dict[str, tuple[DeviceDescription, JoystickInfo]]: A dictionary mapping device names to tuples
+            containing the device description and joystick information.
+        Note:
+            This method is asynchronous and should be awaited. It will block until all devices are
+            initialized and ready for use.
         Raises:
             RuntimeError: If the device pool is already running or has not been properly initialized.
         """
@@ -279,40 +289,10 @@ class PyDevicePool:
         """
         ...
 
-    def get_device_description_by_index(self, index: int) -> DeviceDescription:
-        """
-        Retrieve a device description by its index in the devices vector.
-
-        Args:
-            index (int): The index of the device description to retrieve.
-
-        Returns:
-            DeviceDescription: The device description if found.
-
-        Raises:
-            IndexError: If the index is out of range of the devices vector.
-        """
-        ...
-
-    def get_device_description(self, device_name: str) -> DeviceDescription:
-        """
-        Retrieve a device description by its name.
-
-        Args:
-            device_name (str): The name of the device to retrieve.
-
-        Returns:
-            DeviceDescription: The device description if found.
-
-        Raises:
-            KeyError: If no device with the given name exists in the devices vector.
-        """
-        ...
-
     @property
     def debounce_time(self) -> float: ...
     @property
-    def device_descriptions(self) -> list[DeviceDescription]: ...
+    def devices(self) -> dict[str, tuple[DeviceDescription, JoystickInfo]]: ...
     @property
     def btn_mode(self) -> DeviceButtonMode: ...
     @btn_mode.setter
