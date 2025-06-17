@@ -244,16 +244,19 @@ alias = "ABS_HAT0Y"
 
 - **Thrustmaster T.A.320 Copilot**
 - **Thrustmaster TWCS Throttle**
+- **Thrustmaster T.16000M**
 
 配置文件位于 [devices/Thrustmaster/](devices/Thrustmaster/) 目录：
 - [devices/Thrustmaster/ta320.toml](devices/Thrustmaster/ta320.toml)
 - [devices/Thrustmaster/twcs.toml](devices/Thrustmaster/twcs.toml)
+- [devices/Thrustmaster/t16000m.toml](devices/Thrustmaster/t16000m.toml)
 
 ### 设备映射图
 
 项目提供了详细的设备按键映射图：
 - [Thrustmaster T.A320 Copilot 映射图](figures/Thrustmaster_TA320_Copilot.drawio.png)
 - [Thrustmaster TWCS Throttle 映射图](figures/Thrustmaster_TWCS_Throttle.drawio.png)
+- [Thrustmaster T.16000M 映射图](figures/Thrustmaster%20T.16000M.drawio.png)
 
 ## 开发
 
