@@ -444,20 +444,26 @@ impl DevicePool {
                 if let Some(input_data) = input_register.get_mut(device_name) {
                     // Update axes
                     for (code, value) in axes {
-                        input_data.axes.insert(code, value);
+                        if input_data.axes.contains_key(&code) {
+                            input_data.axes.insert(code, value);
+                        }
                     }
 
                     // Update buttons with debouncing
                     for (code, value) in buttons {
                         if Self::should_update_input(code, device_times, debounce_time) {
-                            input_data.buttons.insert(code, value);
+                            if input_data.buttons.contains_key(&code) {
+                                input_data.buttons.insert(code, value);
+                            }
                         }
                     }
 
                     // Update hats with debouncing
                     for (code, value) in hats {
                         if Self::should_update_input(code, device_times, debounce_time) {
-                            input_data.hats.insert(code, value);
+                            if input_data.hats.contains_key(&code) {
+                                input_data.hats.insert(code, value);
+                            }
                         }
                     }
                 }

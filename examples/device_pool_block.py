@@ -11,9 +11,9 @@ async def main():
     # Create a device pool with default settings
     descs = {
         "ta320": DeviceDescription.from_toml("devices/Thrustmaster/ta320.toml"),
-        # "twcs": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
+        "twcs": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
         # "twcs2": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
-        "t16000m": DeviceDescription.from_toml("devices/Thrustmaster/t16000m.toml"),
+        # "t16000m": DeviceDescription.from_toml("devices/Thrustmaster/t16000m.toml"),
     }
 
     device_pool = PyDevicePool(
