@@ -17,3 +17,5 @@ target/
 *.pyd
 
 *.bkp
+
+IMG_*

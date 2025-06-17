@@ -4,8 +4,11 @@ pub mod wrapper;
 
 use pyo3::prelude::*;
 
+#[cfg(target_os = "linux")]
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    pyo3_log::init();
+
     m.add_class::<wrapper::device_pool_wrapper::PyDevicePool>()?;
     m.add_class::<wrapper::joystick_wrapper::PyJoystick>()?;
 

@@ -14,7 +14,7 @@ async def main():
             "devices/Thrustmaster/ta320.toml",
         ],
         debounce_seconds=0.1,
-        btn_mode=DeviceButtonMode.hold(),
+        btn_mode=DeviceButtonMode.trigger(),
     )
     device_desc = device_pool.device_descriptions[0]
     device_name = device_desc.device_name

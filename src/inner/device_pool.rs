@@ -1,9 +1,12 @@
 use crate::inner::description::DeviceDescription;
 use crate::inner::joystick::Joystick;
 use crate::utils::{fetch_connected_joysticks, DeviceButtonMode, JoystickInfo, JoystickState};
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use log::{info, warn};
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 
@@ -71,7 +74,7 @@ impl DevicePool {
                 .collect();
 
             if matching_devices.is_empty() {
-                eprintln!("Device '{}' not found", desc.device_name);
+                warn!("Device '{}' not found", desc.device_name);
                 continue;
             }
 
@@ -418,12 +421,12 @@ impl DevicePool {
         let mut joystick = match Joystick::new(device_path) {
             Ok(js) => js,
             Err(e) => {
-                eprintln!("Failed to create joystick for {}: {}", device_name, e);
+                warn!("Failed to create joystick for {}: {}", device_name, e);
                 return;
             }
         };
 
-        println!("Started monitoring {}", device_name);
+        info!("Started monitoring {}", device_name);
 
         while *running.lock().unwrap() {
             if let Ok(state) = joystick.get_state() {
@@ -463,7 +466,7 @@ impl DevicePool {
             sleep(Duration::from_millis(10)).await;
         }
 
-        println!("Stopped monitoring {}", device_name);
+        info!("Stopped monitoring {}", device_name);
     }
 
     /// Determines if an input should be updated based on the debounce time.

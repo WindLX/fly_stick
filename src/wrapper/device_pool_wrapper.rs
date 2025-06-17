@@ -1,12 +1,14 @@
 use crate::inner::description::DeviceDescription;
 use crate::inner::device_pool::DevicePool;
 use crate::utils::{DeviceButtonMode, JoystickInfo};
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
-use pyo3_async_runtimes::tokio::future_into_py;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
+use pyo3_async_runtimes::tokio::future_into_py;
 use tokio::sync::Mutex;
 
 #[pyclass]
@@ -17,7 +19,7 @@ pub struct PyDevicePool {
 #[pymethods]
 impl PyDevicePool {
     #[new]
-    #[pyo3(signature = (device_descs = HashMap::new(), debounce_seconds = 0.1, btn_mode = DeviceButtonMode::Trigger))]
+    #[pyo3(signature = (device_descs = HashMap::new(), debounce_seconds = 0.1, btn_mode = DeviceButtonMode::Hold))]
     pub fn new(
         device_descs: HashMap<String, DeviceDescription>,
         debounce_seconds: f64,

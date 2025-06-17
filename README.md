@@ -142,7 +142,7 @@ while True:
 
 ## 设备配置
 
-设备配置使用 TOML 格式描述。例如 [devices/thrustmaster/ta320.toml](devices/thrustmaster/ta320.toml)：
+设备配置使用 TOML 格式描述。例如 [devices/Thrustmaster/ta320.toml](devices/Thrustmaster/ta320.toml)：
 
 ```toml
 device_name = "Thrustmaster T.A320 Copilot"
@@ -250,11 +250,15 @@ alias = "ABS_HAT0Y"
 - **Thrustmaster T.A.320 Copilot**
 - **Thrustmaster TWCS Throttle**
 - **Thrustmaster T.16000M**
+- **Thrustmaster TCA Q-Eng 1&2**
+- **Thrustmaster T.Flight Rudder Pedals（使用 TFRP 接入 Thrustmaster T.16000M 中使用）**
 
 配置文件位于 [devices/Thrustmaster/](devices/Thrustmaster/) 目录：
 - [devices/Thrustmaster/ta320.toml](devices/Thrustmaster/ta320.toml)
 - [devices/Thrustmaster/twcs.toml](devices/Thrustmaster/twcs.toml)
 - [devices/Thrustmaster/t16000m.toml](devices/Thrustmaster/t16000m.toml)
+- [devices/Thrustmaster/tca_qeng.toml](devices/Thrustmaster/tca_qeng.toml)
+- [devices/Thrustmaster/twcs_with_tfrp.toml](devices/Thrustmaster/twcs_with_tfrp.toml)
 
 ### 设备映射图
 

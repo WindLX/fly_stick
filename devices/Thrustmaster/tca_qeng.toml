@@ -1,0 +1,53 @@
+device_name = "Thrustmaster TCA Q-Eng 1&2"
+author = "WindLX"
+created = "2025-06-17"
+description = "Thrustmaster TCA Q-Eng Device Description File"
+
+# Axes
+[[axes]]
+# back is +, front is -
+code = 0
+alias = "left_throttle"
+
+[[axes]]
+# back is +, front is -
+code = 1
+alias = "right_throttle"
+
+
+# Buttons
+[[buttons]]
+code = 288
+alias = "left_red"
+
+[[buttons]]
+code = 289
+alias = "right_red"
+
+[[buttons]]
+# 1 means ON, 0 means OFF
+code = 290
+alias = "left_engine"
+
+[[buttons]]
+# 1 means ON, 0 means OFF
+code = 291
+alias = "right_engine"
+
+[[buttons]]
+code = 292
+alias = "left_black"
+
+[[buttons]]
+code = 293
+alias = "right_black"
+
+[[buttons]]
+# 1 means CRANK, 0 means MODE NROM, and it combined with btn 295
+code = 294
+alias = "crank"
+
+[[buttons]]
+# 1 means IGN/START, and it combined with btn 294
+code = 295
+alias = "ign_start"

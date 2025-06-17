@@ -1,7 +1,8 @@
-use pyo3::{prelude::*, types::PyDict};
+use crate::inner::description::{DeviceDescription, DeviceItem};
+
 use std::collections::HashMap;
 
-use crate::inner::description::{DeviceDescription, DeviceItem};
+use pyo3::{prelude::*, types::PyDict};
 
 /// Joystick information containing path and name
 #[derive(Debug, Clone)]

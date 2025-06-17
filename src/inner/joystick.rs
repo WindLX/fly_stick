@@ -1,7 +1,9 @@
 use crate::utils::JoystickState;
-use evdev::Device;
+
 use std::collections::HashMap;
 use std::path::Path;
+
+use evdev::Device;
 
 /// A joystick interface that wraps an evdev device.
 ///

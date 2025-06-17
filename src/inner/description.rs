@@ -1,7 +1,9 @@
 use crate::utils::JoystickState;
+
+use std::fs;
+
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::fs;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[pyclass]
