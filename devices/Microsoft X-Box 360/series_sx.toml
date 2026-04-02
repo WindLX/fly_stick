@@ -1,7 +1,7 @@
-device_name = "Microsoft X-Box 360 S|X Controller"
+device_name = "Microsoft Xbox Series S|X Controller"
 author = "WindLX"
 created = "2025-06-16"
-description = "Microsoft X-Box 360 S|X Controller Device Description File"
+description = "Microsoft Xbox Series S|X Controller Device Description File"
 
 # Axes
 [[axes]]
@@ -14,12 +14,15 @@ alias = "ABS_Y"
 
 [[axes]]
 code = 2
+alias = "ABS_RZ"
 
 [[axes]]
 code = 3
+alias = "ABS_RX"
 
 [[axes]]
 code = 4
+alias = "ABS_RY"
 
 [[axes]]
 code = 5
@@ -28,39 +31,51 @@ alias = "ABS_RZ"
 # Buttons
 [[buttons]]
 code = 167
+alias = "BTN_UPLOAD"
 
 [[buttons]]
 code = 304
+alias = "BTN_A"
 
 [[buttons]]
 code = 305
+alias = "BTN_B"
 
 [[buttons]]
 code = 307
+alias = "BTN_X"
 
 [[buttons]]
 code = 308
+alias = "BTN_Y"
 
 [[buttons]]
 code = 310
+alias = "BTN_LB"
 
 [[buttons]]
 code = 311
+alias = "BTN_RB"
 
 [[buttons]]
 code = 314
+alias = "BTN_START"
 
 [[buttons]]
 code = 315
+alias = "BTN_MENU"
 
 [[buttons]]
 code = 316
+alias = "BTN_XBOX"
 
 [[buttons]]
 code = 317
+alias = "BTN_Z"
 
 [[buttons]]
 code = 318
+alias = "BTN_RZ"
 
 # Hats
 [[hats]]

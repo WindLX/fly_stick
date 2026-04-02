@@ -1,25 +1,25 @@
 # fly-stick
 
-一个基于 Rust 和 PyO3 构建的高性能 Python 库，专门用于处理游戏控制器（操纵杆/手柄）输入设备。该库使用 Linux evdev 接口提供低延迟的设备监控和状态读取功能，特别适用于飞行模拟器控制设备。
+一个基于 Rust 和 PyO3 构建的高性能 Python 库，专门用于处理游戏控制器（操纵杆/手柄）输入设备。该库使用 Linux evdev 接口提供低延迟的设备监控和状态读取能力，特别适用于飞行模拟器等实时输入场景。
 
 ## 特性
 
 - 🎮 **多设备支持** - 同时监控多个游戏控制器设备
-- ⚡ **高性能核心** - 基于 Rust 的底层实现，提供毫秒级响应
-- 🔄 **异步/同步双模式** - 支持异步和同步设备状态获取
-- 📊 **设备池管理** - 统一管理多设备，自动处理设备连接状态
-- 🛠️ **TOML 配置** - 基于 TOML 的设备配置描述文件
-- 🐍 **完整 Python API** - 易用的 Python 接口
-- 🎯 **防抖动处理** - 内置按钮和输入防抖动机制
-- 📈 **实时状态监控** - 轴、按钮、帽子开关的实时状态更新
+- ⚡ **高性能核心** - Rust 底层实现，提供毫秒级响应
+- 🔄 **异步/非阻塞双模式** - 支持 `await fetch()` 与 `fetch_nowait()`
+- 📊 **设备池管理** - 统一管理多设备，读取逻辑设备状态
+- 🛠️ **TOML 配置** - 基于 TOML 的设备描述文件
+- 🐍 **完整 Python API** - 直接从 `fly_stick` 包导入核心类型
+- 🎯 **按钮模式控制** - 支持 `trigger` 与 `hold` 两种按钮处理模式
+- 📈 **实时状态监控** - 轴、按钮、帽子开关状态实时更新
 
 ## 安装
 
 ### 系统要求
 
-- Linux 系统（依赖 evdev 接口）
+- Linux 系统（依赖 evdev）
 - Python 3.10+
-- Rust 1.70+（仅开发时需要）
+- Rust（仅开发或源码构建时需要）
 
 ### 从源码构建
 
@@ -31,14 +31,13 @@ cd fly_stick
 # 安装构建依赖
 pip install maturin
 
-# 构建和安装
+# 构建并安装到当前 Python 环境
 maturin develop
 ```
 
 ### 使用 uv（推荐）
 
 ```bash
-# 使用 uv 包管理器
 uv sync
 uv run maturin develop
 ```
@@ -51,32 +50,26 @@ uv run maturin develop
 import asyncio
 import fly_stick
 
+
 async def monitor_single_device():
-    # 获取连接的设备
-    devices = fly_stick.fetch_connected_devices()
+    devices = fly_stick.fetch_connected_joysticks()
     if not devices:
         print("未找到设备")
         return
 
-    device_path, device_name = devices[0]
-    joystick = fly_stick.PyJoystick(device_path)
+    dev = devices[0]
+    joystick = fly_stick.PyJoystick(dev.path)
 
-    print(f"监控设备: {device_name}")
+    print(f"监控设备: {dev.name} @ {dev.path}")
 
     while True:
         try:
-            # 获取设备状态 (axes, buttons, hats)
             state = joystick.get_state()
-            axes = state.axes
-            buttons = state.buttons  
-            hats = state.hats
-            
-            if axes or buttons or hats:
-                print(f"轴: {axes}, 按钮: {buttons}, 帽子开关: {hats}")
-            
+            print(state.to_dict())
             await asyncio.sleep(0.01)
         except KeyboardInterrupt:
             break
+
 
 asyncio.run(monitor_single_device())
 ```
@@ -85,64 +78,72 @@ asyncio.run(monitor_single_device())
 
 ```python
 import asyncio
-from fly_stick import DevicePool
+from fly_stick import PyDevicePool, DeviceDescription, DeviceButtonMode
+
 
 async def monitor_device_pool():
-    # 使用设备描述文件初始化设备池
-    pool = DevicePool(
-        descs = {
+    pool = PyDevicePool(
+        device_descs={
             "ta320": DeviceDescription.from_toml("devices/Thrustmaster/ta320.toml"),
             "twcs": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
-            "twcs2": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
         },
-        debounce_time=0.1  # 100ms 防抖动时间
+        debounce_seconds=0.1,
+        btn_mode=DeviceButtonMode.hold(),
     )
+
+    # 使用设备池前先初始化监控
+    await pool.reset()
 
     print("开始监控设备池...")
 
     while True:
         try:
-            # 异步获取所有设备状态
-            states = await pool.fetch(timeout=1.0)
-            if states:
-                for device_name, device_state in states.items():
-                    print(f"{device_name}: {device_state}")
+            states = await pool.fetch(timeout_seconds=1.0)
+            for device_name, state in states.items():
+                print(f"{device_name}: {state.to_dict()}")
         except KeyboardInterrupt:
             print("停止监控")
+            await pool.stop()
             break
+
 
 asyncio.run(monitor_device_pool())
 ```
 
-### 设备池同步使用
+### 设备池非阻塞读取
 
 ```python
-from fly_stick import DevicePool
+import asyncio
+from fly_stick import PyDevicePool, DeviceDescription
 
-# 初始化设备池
-pool = DevicePool(
-    descs = {
-        "ta320": DeviceDescription.from_toml("devices/Thrustmaster/ta320.toml"),
-        "twcs": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
-        "twcs2": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
-    },
-    debounce_time=0.1
-)
 
-# 同步获取设备状态
-while True:
+async def monitor_nowait():
+    pool = PyDevicePool(
+        device_descs={
+            "ta320": DeviceDescription.from_toml("devices/Thrustmaster/ta320.toml"),
+            "twcs": DeviceDescription.from_toml("devices/Thrustmaster/twcs.toml"),
+        },
+        debounce_seconds=0.1,
+    )
+
+    await pool.reset()
+
     try:
-        states = pool.fetch_nowait()
-        if states:
-            for device_name, state in states.items():
-                print(f"{device_name}: 轴={state['axes']}, 按钮={state['buttons']}")
+        while True:
+            states = pool.fetch_nowait()
+            for name, state in states.items():
+                print(f"{name}: 轴={state.axes}, 按钮={state.buttons}, 帽子={state.hats}")
+            await asyncio.sleep(0.01)
     except KeyboardInterrupt:
-        break
+        await pool.stop()
+
+
+asyncio.run(monitor_nowait())
 ```
 
 ## 设备配置
 
-设备配置使用 TOML 格式描述。例如 [devices/Thrustmaster/ta320.toml](devices/Thrustmaster/ta320.toml)：
+DevicePool 的设备配置使用 TOML 格式描述，此描述文件约束了哪些按键才会被监控和记录数据。例如 `devices/Thrustmaster/ta320.toml`：
 
 ```toml
 device_name = "Thrustmaster T.A320 Copilot"
@@ -150,185 +151,150 @@ author = "WindLX"
 created = "2025-01-14"
 description = "Thrustmaster T.A320 Copilot Device Description File"
 
-# 轴配置 (模拟输入)
 [[axes]]
 code = 0
 alias = "ABS_X"
 
 [[axes]]
-code = 1  
+code = 1
 alias = "ABS_Y"
 
-[[axes]]
-code = 5
-alias = "ABS_RZ"
-
-# 按钮配置
 [[buttons]]
 code = 288
 alias = "BTN_TRIGGER"
 
-[[buttons]]
-code = 289
-alias = "BTN_THUMB"
-
-[[buttons]]
-code = 290
-alias = "BTN_THUMB2"
-
-# 帽子开关配置 (方向键)
 [[hats]]
 code = 16
 alias = "ABS_HAT0X"
-
-[[hats]]
-code = 17
-alias = "ABS_HAT0Y"
 ```
 
 ### 配置文件说明
 
-- `device_name`: 设备显示名称
-- `author`: 配置文件作者
-- `created`: 创建日期
-- `description`: 设备描述
-- `axes`: 轴配置列表，包含 code（evdev 代码）和 alias（别名）
-- `buttons`: 按钮配置列表
-- `hats`: 帽子开关配置列表
+- `device_name`: 设备显示名称（用于匹配系统设备名）
+- `author`: 配置文件作者（可选）
+- `created`: 创建日期（可选）
+- `description`: 设备描述（可选）
+- `axes`: 轴配置列表，包含 `code` 与 `alias`
+- `buttons`: 按钮配置列表，包含 `code` 与 `alias`
+- `hats`: 帽子开关配置列表，包含 `code` 与 `alias`
 
 ## API 参考
 
 ### 核心函数
 
-- [`fetch_connected_joysticks()`](src/utils.rs) - 获取所有连接的游戏控制器设备
-- [`PyJoystick(device_path)`](src/wrapper/joystick_wrapper.rs) - 创建操纵杆实例
-- [`PyJoystick.get_state()`](src/wrapper/joystick_wrapper.rs) - 获取设备当前状态
+- `fetch_connected_joysticks()` - 获取当前连接的输入设备列表
+
+### 核心类
+
+- `PyJoystick(device_path)`
+- `PyJoystick.get_state()`
+- `PyDevicePool(device_descs, debounce_seconds=0.1, btn_mode=DeviceButtonMode.hold())`
+- `PyDevicePool.reset()`
+- `PyDevicePool.fetch(timeout_seconds=None)`
+- `PyDevicePool.fetch_nowait()`
+- `PyDevicePool.stop()`
+- `PyDevicePool.devices`（属性）
+- `PyDevicePool.debounce_time`（属性）
+- `PyDevicePool.button_mode`（属性，可读写）
 
 ### 数据结构
 
-- [`JoystickInfo`](src/utils.rs) - 操纵杆信息，包含路径和名称
-- [`JoystickState`](src/utils.rs) - 操纵杆状态，包含 axes、buttons、hats
+- `JoystickInfo`（`path`, `name`）
+- `JoystickState`（`axes`, `buttons`, `hats`）
+- `JoystickState.to_dict()`
+- `JoystickState.to_alias_dict(desc)`
+- `JoystickState.get_alias_axes(desc)`
+- `JoystickState.get_alias_buttons(desc)`
+- `JoystickState.get_alias_hats(desc)`
+- `DeviceDescription`
+- `DeviceDescription.from_toml(toml_file)`
+- `DeviceDescription.build_state()`
+- `DeviceItem`
+- `DeviceButtonMode.trigger()`
+- `DeviceButtonMode.hold()`
 
-### 设备池类
-
-- [`PyDevicePool`](src/fly_stick/device_pool.py) - 多设备管理器
-- [`PyDevicePool.fetch(timeout_seconds)`](src/fly_stick/device_pool.py) - 异步获取设备状态
-- [`PyDevicePool.fetch_nowait()`](src/fly_stick/device_pool.py) - 同步获取设备状态
-- [`PyDevicePool.reset()`](src/fly_stick/device_pool.py) - 重置设备池状态
-- [`PyDevicePool.stop()`](src/fly_stick/device_pool.py) - 停止设备池并清理资源
-- [`PyDevicePool.get_device_description_by_index(index)`](src/fly_stick/device_pool.py) - 根据索引获取设备描述
-- [`PyDevicePool.get_device_description(device_name)`](src/fly_stick/device_pool.py) - 根据名称获取设备描述
-
-### 设备描述
-
-- [`DeviceDescription`](src/inner/description.rs) - 设备配置描述类
-- [`DeviceDescription.from_toml(toml_file)`](src/inner/description.rs) - 从 TOML 文件加载配置
-- [`DeviceDescription.build_state()`](src/inner/description.rs) - 从设备描述构建状态
-- [`DeviceItem`](src/inner/description.rs) - 设备项配置，包含 code 和 alias
-
-### 按钮模式
-
-- [`DeviceButtonMode.trigger()`](src/fly_stick/device_pool.py) - 按钮触发模式
-- [`DeviceButtonMode.hold()`](src/fly_stick/device_pool.py) - 按钮保持模式
-- [`DeviceButtonMode`](src/fly_stick/device_pool.py) - 按钮模式类，用于配置按钮交互行为
+> 注意：使用 `PyDevicePool.fetch()` 或 `fetch_nowait()` 前，需先调用 `await reset()`。
 
 ## 示例
 
 项目包含多个示例文件：
 
-- [examples/single_device.py](examples/single_device.py) - 单设备异步监控
-- [examples/multi_device.py](examples/multi_device.py) - 多设备监控
-- [examples/device_pool.py](examples/device_pool.py) - 同步设备池使用
-- [examples/device_pool_block.py](examples/device_pool_block.py) - 阻塞式设备池使用
-- [examples/alias.py](examples/alias.py) - 使用别名访问按键
-- [examples/btn_mode.py](examples/btn_mode.py) - 切换按键触发模式
+- `examples/single_device.py` - 单设备异步监控
+- `examples/multi_device.py` - 多设备异步监控
+- `examples/device_pool.py` - 设备池非阻塞读取
+- `examples/device_pool_block.py` - 设备池阻塞读取
+- `examples/alias.py` - 按别名读取轴状态
+- `examples/btn_mode.py` - 按钮触发模式示例
 
 ## 支持的设备
 
-目前已测试的设备：
+目前仓库内提供了以下设备描述文件：
 
-- **Thrustmaster T.A.320 Copilot**
-- **Thrustmaster TWCS Throttle**
-- **Thrustmaster T.16000M**
-- **Thrustmaster TCA Q-Eng 1&2**
-- **Thrustmaster T.Flight Rudder Pedals（使用 TFRP 接入 Thrustmaster T.16000M 中使用）**
-
-配置文件位于 [devices/Thrustmaster/](devices/Thrustmaster/) 目录：
-- [devices/Thrustmaster/ta320.toml](devices/Thrustmaster/ta320.toml)
-- [devices/Thrustmaster/twcs.toml](devices/Thrustmaster/twcs.toml)
-- [devices/Thrustmaster/t16000m.toml](devices/Thrustmaster/t16000m.toml)
-- [devices/Thrustmaster/tca_qeng.toml](devices/Thrustmaster/tca_qeng.toml)
-- [devices/Thrustmaster/twcs_with_tfrp.toml](devices/Thrustmaster/twcs_with_tfrp.toml)
+- `devices/Thrustmaster/ta320.toml`
+- `devices/Thrustmaster/twcs.toml`
+- `devices/Thrustmaster/t16000m.toml`
+- `devices/Thrustmaster/tca_qeng.toml`
+- `devices/Thrustmaster/twcs_with_tfrp.toml`
+- `devices/Microsoft X-Box 360/pad.toml`
+- `devices/Microsoft X-Box 360/series_sx.toml`
 
 ### 设备映射图
 
-项目提供了详细的设备按键映射图：
-- [Thrustmaster T.A320 Copilot 映射图](figures/Thrustmaster_TA320_Copilot.drawio.png)
-- [Thrustmaster TWCS Throttle 映射图](figures/Thrustmaster_TWCS_Throttle.drawio.png)
-- [Thrustmaster T.16000M 映射图](figures/Thrustmaster%20T.16000M.drawio.png)
+项目提供了设备按键映射图：
+
+- `figures/Thrustmaster_TA320_Copilot.drawio.png`
+- `figures/Thrustmaster_TWCS_Throttle.drawio.png`
+- `figures/Thrustmaster T.16000M.drawio.png`
+- `figures/Thrustmaster T.Flight Rudder Pedals.drawio.png`
+- `figures/Thrustmaster TCA Q-Eng 1&2.drawio.png`
 
 ## 开发
 
 ### 项目结构
 
-```
+```text
 fly_stick/
 ├── src/
-│   ├── lib.rs                  # Rust 模块入口
-│   ├── utils.rs                # 工具函数
-│   ├── inner/                  # 核心实现
-│   │   ├── description.rs      # 设备描述
-│   │   ├── device_pool.rs      # 设备池实现  
-│   │   ├── joystick.rs         # 操纵杆实现
-│   │   └── mod.rs              # 模块声明
-│   ├── wrapper/                # Python 包装器
+│   ├── lib.rs
+│   ├── utils.rs
+│   ├── inner/
+│   │   ├── description.rs
+│   │   ├── device_pool.rs
+│   │   ├── joystick.rs
+│   │   └── mod.rs
+│   ├── wrapper/
 │   │   ├── device_pool_wrapper.rs
-│   │   └── joystick_wrapper.rs
-│   └── fly_stick/              # Python 包
-│       ├── __init__.py         # 包初始化
-│       ├── device_pool.py      # 设备池 Python 接口
-│       └── device_description.py # 设备描述 Python 接口
-├── examples/                   # 示例代码
-├── devices/                    # 设备配置文件
-├── figures/                    # 文档图片和映射图
-├── Cargo.toml                  # Rust 项目配置
-└── pyproject.toml              # Python 项目配置
+│   │   ├── joystick_wrapper.rs
+│   │   └── mod.rs
+│   └── fly_stick/
+│       ├── __init__.py
+│       └── _core.pyi
+├── examples/
+├── devices/
+├── figures/
+├── Cargo.toml
+└── pyproject.toml
 ```
 
-### 构建要求
-
-- **Rust 1.70+** - 核心库实现
-- **Python 3.10+** - Python 接口
-- **maturin** - Python 扩展构建工具
-- **Linux evdev** - 设备输入接口
-
-### 开发依赖
+### 构建与测试
 
 ```bash
-# 安装开发依赖
-pip install -e ".[dev]"
-
-# 运行测试
+# Rust 单元测试
 cargo test
+
+# Python 测试（如项目中提供测试用例）
 pytest
 
-# 构建发布版本
+# 构建发布 wheel
 maturin build --release
 ```
 
-### 添加新设备支持
-
-1. 使用 `fetch_connected_devices()` 获取设备信息
-2. 创建设备的 TOML 配置文件
-3. 测试设备输入映射
-4. 添加到 [devices/](devices/) 目录
-
 ## 性能特性
 
-- **低延迟**: 基于 Rust 的核心实现，提供毫秒级响应
-- **防抖动**: 内置按钮防抖动机制，避免误触发
-- **非阻塞**: evdev 非阻塞模式，不会阻塞主线程
-- **内存安全**: Rust 的内存安全保证，避免内存泄漏
+- **低延迟**: Rust 核心实现，输入处理延迟低
+- **按钮模式控制**: 支持 Trigger/Hold 两种按钮语义
+- **非阻塞读取**: 可使用 `fetch_nowait()` 做高频轮询
+- **内存安全**: Rust 提供内存安全保障
 
 ## TODO
 
@@ -337,21 +303,22 @@ maturin build --release
 
 ## 许可证
 
-本项目采用 [MIT 许可证](LICENSE)。
+本项目采用 MIT 许可证，详见 `LICENSE`。
 
 ## 贡献
 
-欢迎提交 Issue 和 Pull Request！
+欢迎提交 Issue 和 Pull Request。
 
-请确保：
-1. 代码遵循项目风格
-2. 添加必要的测试
-3. 更新相关文档
+建议在提交前完成：
+
+1. 代码风格自检
+2. 必要测试补充
+3. 文档同步更新
 
 ## 作者
 
-- **windlx** - *初始开发* - [windlx](https://github.com/WindLX)
+- **windlx** - 初始开发 - https://github.com/WindLX
 
 ---
 
-*注意：此库目前仅支持 Linux 系统，因为它依赖于 evdev 接口。未来可能会添加对其他平台的支持。*
+*注意：该库当前仅支持 Linux（evdev）。未来可按需扩展到其他平台。*

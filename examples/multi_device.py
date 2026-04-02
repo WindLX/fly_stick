@@ -22,7 +22,7 @@ async def monitor_device(
         while True:
             # Get device state
             state = joystick.get_state()
-            axes, buttons, hats = state.axes, state.buttons, state.hats
+            axes, _buttons, _hats = state.axes, state.buttons, state.hats
 
             # If this is the target device and has channel, send specific axis data
             if device_name == "Thrustmaster T.A320 Copilot" and channel and axes:

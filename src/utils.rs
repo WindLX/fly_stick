@@ -6,7 +6,7 @@ use pyo3::{prelude::*, types::PyDict};
 
 /// Joystick information containing path and name
 #[derive(Debug, Clone)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct JoystickInfo {
     #[pyo3(get)]
     pub path: String,
@@ -15,7 +15,7 @@ pub struct JoystickInfo {
 }
 
 #[derive(Debug, Clone)]
-#[pyclass]
+#[pyclass(from_py_object)]
 /// Represents input data from a joystick or game controller device.
 ///
 /// This structure contains the current state of all input elements including
@@ -83,7 +83,7 @@ impl JoystickState {
     /// joystick_dict = joystick_state.to_dict()
     /// print(joystick_dict)  # {'axes': {0: 1.0, 1: -1.0}, 'buttons': {0: 1, 1: 0}, 'hats': {0: 1}}
     /// ```
-    pub fn to_dict(&self, py: Python) -> PyResult<PyObject> {
+    pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
 
         // Convert axes
@@ -107,7 +107,7 @@ impl JoystickState {
         }
         dict.set_item("hats", hats_dict)?;
 
-        Ok(dict.into())
+        Ok(dict)
     }
 
     /// Converts the JoystickState to a dictionary with aliases based on the provided DeviceDescription.
@@ -137,7 +137,11 @@ impl JoystickState {
     /// joystick_alias_dict = joystick_state.to_alias_dict(py, desc)
     /// print(joystick_alias_dict)  # {'axes': {'alias1': 1.0, 'alias2': -1.0}, 'buttons': {'alias1': 1, 'alias2': 0}, 'hats': {'alias1': 1}}
     /// ```
-    pub fn to_alias_dict(&self, py: Python, desc: &DeviceDescription) -> PyResult<PyObject> {
+    pub fn to_alias_dict<'py>(
+        &self,
+        py: Python<'py>,
+        desc: &DeviceDescription,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let result_dict = PyDict::new(py);
 
         // Process axes
@@ -152,37 +156,49 @@ impl JoystickState {
         let hats_dict = self.get_alias_hats(py, desc)?;
         result_dict.set_item("hats", hats_dict)?;
 
-        Ok(result_dict.into())
+        Ok(result_dict)
     }
 
     /// Returns a reference to the axes HashMap keyed by aliases.
-    pub fn get_alias_axes(&self, py: Python, desc: &DeviceDescription) -> PyResult<PyObject> {
+    pub fn get_alias_axes<'py>(
+        &self,
+        py: Python<'py>,
+        desc: &DeviceDescription,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let axes_alias_map = Self::find_by_alias(&desc.axes, &self.axes);
         let axes_dict = PyDict::new(py);
         for (alias, value) in axes_alias_map {
             axes_dict.set_item(alias, value)?;
         }
-        Ok(axes_dict.into())
+        Ok(axes_dict)
     }
 
     /// Returns a reference to the buttons HashMap keyed by aliases.
-    pub fn get_alias_buttons(&self, py: Python, desc: &DeviceDescription) -> PyResult<PyObject> {
+    pub fn get_alias_buttons<'py>(
+        &self,
+        py: Python<'py>,
+        desc: &DeviceDescription,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let buttons_alias_map = Self::find_by_alias(&desc.buttons, &self.buttons);
         let buttons_dict = PyDict::new(py);
         for (alias, value) in buttons_alias_map {
             buttons_dict.set_item(alias, value)?;
         }
-        Ok(buttons_dict.into())
+        Ok(buttons_dict)
     }
 
     /// Returns a reference to the hats HashMap keyed by aliases.
-    pub fn get_alias_hats(&self, py: Python, desc: &DeviceDescription) -> PyResult<PyObject> {
+    pub fn get_alias_hats<'py>(
+        &self,
+        py: Python<'py>,
+        desc: &DeviceDescription,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let hats_alias_map = Self::find_by_alias(&desc.hats, &self.hats);
         let hats_dict = PyDict::new(py);
         for (alias, value) in hats_alias_map {
             hats_dict.set_item(alias, value)?;
         }
-        Ok(hats_dict.into())
+        Ok(hats_dict)
     }
 }
 
@@ -247,7 +263,7 @@ pub fn fetch_connected_joysticks() -> Vec<JoystickInfo> {
 /// The mode can be set when creating a DevicePool instance,
 /// and it affects how button events are processed during input handling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub enum DeviceButtonMode {
     Trigger,
     Hold,

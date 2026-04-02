@@ -1,7 +1,7 @@
 import asyncio
 
 from rich.pretty import pprint
-from fly_stick import PyDevicePool, DeviceDescription, fetch_connected_joysticks
+from fly_stick import PyDevicePool, DeviceDescription
 
 
 async def main():
@@ -17,7 +17,7 @@ async def main():
     }
 
     device_pool = PyDevicePool(
-        descs,
+        device_descs=descs,
         debounce_seconds=0.1,
     )
 

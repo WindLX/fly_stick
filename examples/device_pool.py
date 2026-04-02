@@ -15,7 +15,7 @@ async def main():
     }
 
     device_pool = PyDevicePool(
-        descs,
+        device_descs=descs,
         debounce_seconds=0.1,
     )
 

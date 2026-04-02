@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[pyclass]
+#[pyclass(from_py_object)]
 /// Represents a single device item with a unique code and optional alias.
 ///
 /// This structure is used to identify and reference specific device components
@@ -66,7 +66,7 @@ impl DeviceItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[pyclass]
+#[pyclass(from_py_object)]
 /// Represents a complete description of an input device configuration.
 ///
 /// This struct contains metadata about the device as well as definitions for all

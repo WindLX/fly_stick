@@ -40,7 +40,7 @@ impl PyDevicePool {
         })
     }
 
-    pub fn fetch_nowait(&self, py: Python) -> PyResult<PyObject> {
+    pub fn fetch_nowait<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let inner = Arc::clone(&self.inner);
 
         pyo3_async_runtimes::tokio::get_runtime().block_on(async {
@@ -51,7 +51,7 @@ impl PyDevicePool {
                     for (device_name, state) in state_map {
                         dict.set_item(device_name, state)?;
                     }
-                    Ok(dict.into())
+                    Ok(dict)
                 }
                 Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e)),
             }
@@ -65,17 +65,17 @@ impl PyDevicePool {
         timeout_seconds: Option<f64>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let inner = Arc::clone(&self.inner);
-        future_into_py::<_, PyObject>(py, async move {
+        future_into_py(py, async move {
             let pool = inner.lock().await;
             let timeout_duration = timeout_seconds.map(Duration::from_secs_f64);
 
             match pool.fetch(timeout_duration).await {
-                Ok(state_map) => Python::with_gil(|py| {
+                Ok(state_map) => Python::attach(|py| {
                     let dict = PyDict::new(py);
                     for (device_name, state) in state_map {
                         dict.set_item(device_name, state)?;
                     }
-                    Ok(dict.into())
+                    Ok(dict.unbind())
                 }),
                 Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e)),
             }
