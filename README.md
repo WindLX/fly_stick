@@ -21,6 +21,12 @@
 - Python 3.10+
 - Rust（仅开发或源码构建时需要）
 
+### 从 PYPI 下载
+
+```bash
+uv add fly-stick
+```
+
 ### 从源码构建
 
 ```bash
