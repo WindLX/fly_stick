@@ -1,12 +1,13 @@
 import asyncio
 
 from rich.pretty import pprint
-from fly_stick import PyDevicePool, DeviceDescription
+
+from fly_stick import DeviceDescription, PyDevicePool
 
 
 async def main():
     """
-    Demonstrate how to use the DevicePool class to monitor multiple fly_stick devices.
+    Demonstrate how to use the DevicePool class to effect multiple fly_stick devices.
     """
     # Create a device pool with a named device description map
     logical_name = "ta320"
@@ -19,7 +20,7 @@ async def main():
     )
     print(f"Using profile: {logical_name} ({device_desc.device_name})")
 
-    # Start monitoring devices
+    # Start effecting devices
     await device_pool.reset()
 
     try:
@@ -33,7 +34,7 @@ async def main():
                 pprint(input_.get_alias_axes(desc=device_desc))
             await asyncio.sleep(0.01)  # Adjust the sleep time as needed
     except KeyboardInterrupt:
-        print("Stopping device monitoring...")
+        print("Stopping device effecting...")
         await device_pool.stop()
 
 

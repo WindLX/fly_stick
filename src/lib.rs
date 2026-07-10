@@ -1,3 +1,4 @@
+pub mod active;
 pub mod inner;
 pub mod utils;
 pub mod wrapper;
@@ -11,6 +12,11 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_class::<wrapper::device_pool_wrapper::PyDevicePool>()?;
     m.add_class::<wrapper::joystick_wrapper::PyJoystick>()?;
+    m.add_class::<wrapper::active_wrapper::ActiveSidestickConfig>()?;
+    m.add_class::<wrapper::active_wrapper::ActiveSidestick>()?;
+    m.add_class::<wrapper::active_wrapper::SidestickAxisTelemetry>()?;
+    m.add_class::<wrapper::active_wrapper::SidestickStickTelemetry>()?;
+    m.add_class::<wrapper::active_wrapper::ActiveSidestickState>()?;
 
     m.add_class::<utils::JoystickInfo>()?;
     m.add_class::<utils::JoystickState>()?;

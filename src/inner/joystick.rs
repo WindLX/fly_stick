@@ -137,11 +137,7 @@ impl Joystick {
                                     } else {
                                         0
                                     };
-                                    if axis == evdev::AbsoluteAxisCode::ABS_HAT0X {
-                                        hats_data.insert(axis.0, value);
-                                    } else if axis == evdev::AbsoluteAxisCode::ABS_HAT0Y {
-                                        hats_data.insert(axis.0, value);
-                                    }
+                                    hats_data.insert(axis.0, value);
                                 }
                             }
                         }

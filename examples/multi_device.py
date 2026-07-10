@@ -1,11 +1,10 @@
-from typing import Optional
 import asyncio
 
 import fly_stick
 
 
 async def monitor_device(
-    device_path: str, device_name: str, channel: Optional[asyncio.Queue] = None
+    device_path: str, device_name: str, channel: asyncio.Queue | None = None
 ) -> None:
     """
     Asynchronously monitor input from a single device.
@@ -50,7 +49,7 @@ async def monitor_device(
             # Use async sleep
             await asyncio.sleep(0.01)
 
-    except IOError as e:
+    except OSError as e:
         print(f"Failed to monitor {device_name}: {e}")
     except asyncio.CancelledError:
         print(f"Stopped monitoring {device_name}")
@@ -96,7 +95,8 @@ async def data_consumer(channel: asyncio.Queue) -> None:
 
 async def main() -> None:
     """
-    Demonstrate how to asynchronously monitor multiple fly_stick devices and send TCP data.
+    Demonstrate how to asynchronously monitor multiple fly_stick devices
+      and send TCP data.
     """
 
     # Create channel for data transmission
@@ -118,11 +118,10 @@ async def main() -> None:
     tasks: list[asyncio.Task] = []
     for device in devices:
         device_path, device_name = device.path, device.name
-        if device_name == "Thrustmaster T.A320 Copilot":
-            task = asyncio.create_task(
-                monitor_device(device_path, device_name, channel)
-            )
-        elif device_name == "Thrustmaster TWCS Throttle":
+        if (
+            device_name == "Thrustmaster T.A320 Copilot"
+            or device_name == "Thrustmaster TWCS Throttle"
+        ):
             task = asyncio.create_task(
                 monitor_device(device_path, device_name, channel)
             )
@@ -134,7 +133,7 @@ async def main() -> None:
     consumer_task = asyncio.create_task(data_consumer(channel))
     tasks.append(consumer_task)
 
-    print(f"\nStarting monitoring {len(tasks)-1} devices (Press Ctrl+C to stop)...")
+    print(f"\nStarting monitoring {len(tasks) - 1} devices (Press Ctrl+C to stop)...")
 
     try:
         # Wait for all tasks to complete (will actually run indefinitely)

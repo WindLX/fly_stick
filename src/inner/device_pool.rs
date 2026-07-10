@@ -437,9 +437,7 @@ impl DevicePool {
                 let mut input_register = input_register.lock().unwrap();
 
                 let mut last_times_map = last_button_time.lock().unwrap();
-                let device_times = last_times_map
-                    .entry(device_name.to_string())
-                    .or_insert_with(HashMap::new);
+                let device_times = last_times_map.entry(device_name.to_string()).or_default();
 
                 if let Some(input_data) = input_register.get_mut(device_name) {
                     // Update axes
@@ -451,19 +449,19 @@ impl DevicePool {
 
                     // Update buttons with debouncing
                     for (code, value) in buttons {
-                        if Self::should_update_input(code, device_times, debounce_time) {
-                            if input_data.buttons.contains_key(&code) {
-                                input_data.buttons.insert(code, value);
-                            }
+                        if Self::should_update_input(code, device_times, debounce_time)
+                            && input_data.buttons.contains_key(&code)
+                        {
+                            input_data.buttons.insert(code, value);
                         }
                     }
 
                     // Update hats with debouncing
                     for (code, value) in hats {
-                        if Self::should_update_input(code, device_times, debounce_time) {
-                            if input_data.hats.contains_key(&code) {
-                                input_data.hats.insert(code, value);
-                            }
+                        if Self::should_update_input(code, device_times, debounce_time)
+                            && input_data.hats.contains_key(&code)
+                        {
+                            input_data.hats.insert(code, value);
                         }
                     }
                 }

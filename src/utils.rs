@@ -14,7 +14,7 @@ pub struct JoystickInfo {
     pub name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 #[pyclass(from_py_object)]
 /// Represents input data from a joystick or game controller device.
 ///

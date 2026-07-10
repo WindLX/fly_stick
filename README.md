@@ -12,6 +12,7 @@
 - 🐍 **完整 Python API** - 直接从 `fly_stick` 包导入核心类型
 - 🎯 **按钮模式控制** - 支持 `trigger` 与 `hold` 两种按钮处理模式
 - 📈 **实时状态监控** - 轴、按钮、帽子开关状态实时更新
+- 🛩️ **主动侧杆** - 通过 UDP 接收 SidestickTeensy 双杆遥测并发送飞机状态
 
 ## 安装
 
@@ -146,6 +147,39 @@ async def monitor_nowait():
 
 asyncio.run(monitor_nowait())
 ```
+
+### SidestickTeensy 主动侧杆
+
+`ActiveSidestick` 是独立于 Linux evdev 设备池的 UDP 接口，只使用 ICC 通路，不会连接
+SidestickTeensy 的 GUI/上位机端口。默认监听 `5406`（3 字节逻辑状态）和 `5407`
+（48 字节电机状态），并向 Teensy `30.30.30.6:5405` 发送 `[AOA, elevator, aileron]`
+飞机状态。所有数值均为弧度；线上的数值编码为大端 signed IQ24。
+
+```python
+import asyncio
+from fly_stick import ActiveSidestick
+
+
+async def main() -> None:
+    stick = ActiveSidestick()
+    await stick.start()
+    try:
+        state = await stick.fetch(timeout_seconds=1.0)
+        if state.connected:
+            print(state.stick_1.roll.position_rad)
+            stick.send_aircraft_state(
+                aoa_rad=0.0,
+                elevator_rad=0.0,
+                aileron_rad=0.0,
+            )
+    finally:
+        await stick.stop()
+
+
+asyncio.run(main())
+```
+
+`stick_1` 与 `stick_2` 分别对应固件的 `statebus1` 与 `statebus2`；每根杆包含 `roll` / `pitch` 的位置（rad）、速度（rad/s）和电流（A）。主动侧杆断链 100 ms 后， `state.stale` 变为真；固件同时退出 AP 反驱，但维持本地力梯度和侧杆联动。
 
 ## 设备配置
 

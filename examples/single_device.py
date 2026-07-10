@@ -2,9 +2,11 @@
 # This example demonstrates how to asynchronously monitor multiple fly_stick devices
 # found any input devices
 # and print their state changes. It uses asyncio for non-blocking I/O operations.
-# and handles device monitoring in a way that allows for graceful shutdown on user interruption.
+# and handles device monitoring in a way that allows for graceful shutdown
+#  on user interruption.
 
 import asyncio
+
 import fly_stick
 
 
@@ -31,12 +33,14 @@ async def monitor_device(device_path: str, device_name: str) -> None:
 
             # Only print status when there are changes
             if axes or buttons or hats:
-                print(f"[{device_name}], axes: {axes}, buttons: {buttons}, hats: {hats}")
+                print(
+                    f"[{device_name}], axes: {axes}, buttons: {buttons}, hats: {hats}"
+                )
 
             # Use async sleep
             await asyncio.sleep(0.01)
 
-    except IOError as e:
+    except OSError as e:
         print(f"Failed to monitor {device_name}: {e}")
     except asyncio.CancelledError:
         print(f"Stopped monitoring {device_name}")

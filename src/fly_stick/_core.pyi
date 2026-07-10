@@ -1,4 +1,52 @@
-from typing import Optional
+class ActiveSidestickConfig:
+    bind_host: str
+    teensy_host: str
+    command_port: int
+    logic_port: int
+    state_port: int
+    stale_after_ms: int
+
+    def __init__(
+        self,
+        bind_host: str = "0.0.0.0",
+        teensy_host: str = "30.30.30.6",
+        command_port: int = 5405,
+        logic_port: int = 5406,
+        state_port: int = 5407,
+        stale_after_ms: int = 100,
+    ) -> None: ...
+
+class SidestickAxisTelemetry:
+    position_rad: float
+    velocity_rad_s: float
+    current_a: float
+
+class SidestickStickTelemetry:
+    roll: SidestickAxisTelemetry
+    pitch: SidestickAxisTelemetry
+
+class ActiveSidestickState:
+    stick_1: SidestickStickTelemetry
+    stick_2: SidestickStickTelemetry
+    ap_enabled: bool
+    active: bool
+    coupling_disconnected: bool
+    connected: bool
+    stale: bool
+
+class ActiveSidestick:
+    def __init__(self, config: ActiveSidestickConfig | None = None) -> None: ...
+    async def start(self) -> None: ...
+    async def stop(self) -> None: ...
+    def fetch_nowait(self) -> ActiveSidestickState: ...
+    async def fetch(
+        self, timeout_seconds: float | None = None
+    ) -> ActiveSidestickState: ...
+    def send_aircraft_state(
+        self, aoa_rad: float, elevator_rad: float, aileron_rad: float
+    ) -> None: ...
+    @property
+    def running(self) -> bool: ...
 
 class JoystickInfo:
     """Joystick information containing path and name"""
@@ -54,8 +102,10 @@ def fetch_connected_joysticks() -> list[JoystickInfo]:
 class DeviceButtonMode:
     """Represents the mode of operation for device buttons in the DevicePool.
     This enum defines how button presses are handled:
-    - `Trigger`: The button press is registered only when the button is pressed down, then the state will be reset immediately after.
-      This mode is suitable for actions that should only occur once per press, such as firing a shot or triggering an event.
+    - `Trigger`: The button press is registered only when the button is pressed down,
+      then the state will be reset immediately after.
+      This mode is suitable for actions that should only occur once per press, such as
+      firing a shot or triggering an event.
       The button state will not remain active after the initial press.
     - `Hold`: The button press is registered continuously while the button is held down.
     ///This enum is used to configure the behavior of buttons in the DevicePool,
@@ -71,9 +121,9 @@ class DeviceButtonMode:
         ...
 
     @staticmethod
-    def trigger() -> "DeviceButtonMode": ...
+    def trigger() -> DeviceButtonMode: ...
     @staticmethod
-    def hold() -> "DeviceButtonMode": ...
+    def hold() -> DeviceButtonMode: ...
     def __str__(self) -> str: ...
     def __repr__(self) -> str: ...
     def __eq__(self, other: object) -> bool: ...
@@ -82,9 +132,9 @@ class DeviceItem:
     """Device item with code and optional alias"""
 
     code: int
-    alias: Optional[str]
+    alias: str | None
 
-    def __init__(self, code: int, alias: Optional[str] = None) -> None: ...
+    def __init__(self, code: int, alias: str | None = None) -> None: ...
 
 class DeviceDescription:
     """Device description containing metadata and input items.
@@ -95,9 +145,9 @@ class DeviceDescription:
 
     Attributes:
         device_name (str): Name of the device
-        author (Optional[str]): Author or creator of the device description
-        created (Optional[str]): Creation date/timestamp of the description
-        description (Optional[str]): Detailed description of the device
+        author (str | None): Author or creator of the device description
+        created (str | None): Creation date/timestamp of the description
+        description (str | None): Detailed description of the device
         axes (list[DeviceItem]): List of analog axes available on the device
         buttons (list[DeviceItem]): List of buttons available on the device
         hats (list[DeviceItem]): List of hat/POV switches available on the device
@@ -117,22 +167,22 @@ class DeviceDescription:
     """Device description containing metadata and input items"""
 
     device_name: str
-    author: Optional[str]
-    created: Optional[str]
-    description: Optional[str]
+    author: str | None
+    created: str | None
+    description: str | None
     axes: list[DeviceItem]
     buttons: list[DeviceItem]
     hats: list[DeviceItem]
 
     def __init__(
         self,
-        device_name: Optional[str] = None,
-        author: Optional[str] = None,
-        created: Optional[str] = None,
-        description: Optional[str] = None,
-        axes: Optional[list[DeviceItem]] = None,
-        buttons: Optional[list[DeviceItem]] = None,
-        hats: Optional[list[DeviceItem]] = None,
+        device_name: str | None = None,
+        author: str | None = None,
+        created: str | None = None,
+        description: str | None = None,
+        axes: list[DeviceItem] | None = None,
+        buttons: list[DeviceItem] | None = None,
+        hats: list[DeviceItem] | None = None,
     ) -> None: ...
     @staticmethod
     def from_toml(toml_file: str) -> DeviceDescription:
@@ -146,16 +196,19 @@ class DeviceDescription:
 class PyJoystick:
     """Joystick class for managing a single joystick device.
 
-    This class provides methods to initialize, read state, and manage a single joystick device.
-    It handles the underlying device interactions and provides an easy-to-use interface for
-    fetching joystick states.
+    This class provides methods to initialize, read state,
+      and manage a single joystick device.
+    It handles the underlying device interactions and provides an easy-to-use interface
+      for fetching joystick states.
 
     Args:
         device_path: Path to the joystick device file
-        debounce_seconds: Time interval in seconds to debounce input events (default: 0.1)
+        debounce_seconds: Time interval in seconds to debounce input events
+            (default: 0.1)
 
     Methods:
-        get_state(): Fetch current state of the joystick, including axes, buttons, and hats
+        get_state(): Fetch current state of the joystick, including axes, buttons,
+          and hats
         stop(): Stop the joystick and clean up resources
 
     Example:
@@ -171,18 +224,17 @@ class PyDevicePool:
     """
     Device pool for managing joystick states and device connections.
 
-    PyDevicePool provides an asynchronous interface for managing multiple joystick devices,
-    handling state fetching, and coordinating device interactions with built-in debouncing.
+    PyDevicePool asynchronously manages joystick devices, state, and debouncing.
 
     Args:
         device_descs: Dict of device descriptions keyed by device name.
             Each description should be an instance of DeviceDescription.
-        debounce_seconds: Time interval in seconds to debounce input events (default: 0.1)
+        debounce_seconds: Button debounce interval in seconds (default: 0.1).
 
     Methods:
-        reset(): Asynchronously reset all devices in the pool to their initial state
-        fetch_nowait(): Non-blocking fetch of current joystick state, returns immediately
-        fetch(timeout_seconds=None): Asynchronously fetch joystick state with optional timeout
+        reset(): Reset all devices to their initial state.
+        fetch_nowait(): Return the current joystick state without blocking.
+        fetch(timeout_seconds=None): Fetch joystick state with an optional timeout.
         stop(): Gracefully stop the device pool and clean up resources
 
     Example:
@@ -205,35 +257,32 @@ class PyDevicePool:
         self,
         device_descs: dict[str, DeviceDescription],
         debounce_seconds: float = 0.1,
-        btn_mode: DeviceButtonMode = DeviceButtonMode.trigger(),
+        btn_mode: DeviceButtonMode = ...,
     ) -> None: ...
     async def reset(self) -> dict[str, tuple[DeviceDescription, JoystickInfo]]:
         """Reset all devices in the pool to their initial state.
-        This method initializes all devices based on the provided device description files.
-        It sets up the necessary event loops and prepares the devices for state fetching.
-        This method should be called before any fetch operations to ensure devices are ready.
+        Initializes devices from their descriptions and starts their event loops.
+        Call this before fetching device state.
         Returns:
-            dict[str, tuple[DeviceDescription, JoystickInfo]]: A dictionary mapping device names to tuples
-            containing the device description and joystick information.
+            A mapping from device names to descriptions and joystick information.
         Note:
-            This method is asynchronous and should be awaited. It will block until all devices are
-            initialized and ready for use.
+            Await this method until all devices are initialized.
         Raises:
-            RuntimeError: If the device pool is already running or has not been properly initialized.
+            RuntimeError: If the device pool cannot be initialized.
         """
         ...
 
     def fetch_nowait(self) -> dict[str, JoystickState]:
         """Fetch current joystick state without blocking.
-        This method retrieves the current state of all joysticks in the pool without waiting.
+        Retrieves the latest state of every joystick without waiting.
         It returns immediately with the latest state information.
         Raises:
             RuntimeError: If the device pool has not been initialized or is not running.
         Returns:
-            dict[str, JoystickState]: A dictionary mapping joystick names to their current state.
+            A mapping from joystick names to their current state.
         Note:
             This method is non-blocking and returns the most recent state available.
-            It is useful for scenarios where you need to check joystick states without waiting.
+            Useful when polling joystick states without waiting.
         Example:
             >>> states = device_pool.fetch_nowait()
             >>> for name, state in states.items():
@@ -242,26 +291,21 @@ class PyDevicePool:
         ...
 
     async def fetch(
-        self, timeout_seconds: Optional[float] = None
+        self, timeout_seconds: float | None = None
     ) -> dict[str, JoystickState]:
         """Fetch current joystick state with optional timeout.
-        This method retrieves the current state of all joysticks in the pool, waiting for
-        the specified timeout if provided. If no timeout is specified, it will wait indefinitely
-        until the state is available.
+        Waits for the current joystick state until the optional timeout expires.
         Raises:
             RuntimeError: If the device pool has not been initialized or is not running.
             TimeoutError: If the operation times out before fetching the state.
 
         Args:
-            timeout_seconds (Optional[float], optional): Timeout in seconds for the fetch operation.
-                If None, it will wait indefinitely. Defaults to None.
+            timeout_seconds: Timeout in seconds; `None` waits indefinitely.
 
         Returns:
-            dict[str, JoystickState]: A dictionary mapping joystick names to their current state.
+            A mapping from joystick names to their current state.
         Note:
-            This method is asynchronous and will block until the state is available or the timeout
-            is reached. It is useful for scenarios where you need to wait for joystick states to be
-            updated before proceeding.
+            Waits until state changes are available or the timeout is reached.
         Example:
             >>> try:
             ...     states = await device_pool.fetch(timeout_seconds=2.0)
@@ -276,13 +320,11 @@ class PyDevicePool:
 
     async def stop(self) -> None:
         """Stop the device pool and clean up resources.
-        This method gracefully stops the device pool, ensuring all resources are cleaned up
-        and no further state fetching can occur. It should be called when the device pool is no
-        longer needed to prevent resource leaks.
+        Gracefully stops the device pool and releases its resources.
         Raises:
             RuntimeError: If the device pool is not running or has already been stopped.
         Note:
-            Always call this method when done with the device pool to ensure proper cleanup.
+            Always call this method when the device pool is no longer needed.
         Example:
             >>> await device_pool.stop()
             >>> print("Device pool stopped successfully.")

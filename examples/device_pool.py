@@ -1,7 +1,8 @@
 import asyncio
 
 from rich.pretty import pprint
-from fly_stick import PyDevicePool, DeviceDescription
+
+from fly_stick import DeviceDescription, PyDevicePool
 
 
 async def main():
