@@ -13,7 +13,7 @@ fmt:
 
 check:
     cargo fmt --all -- --check
-    cargo clippy --all-targets --all-features
+    cargo clippy --all-targets --all-features -- -D warnings
     uv run ruff check src/fly_stick tests examples
     uv run ruff format src/fly_stick tests examples --check
     uv run mypy src/fly_stick tests

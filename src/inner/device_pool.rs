@@ -154,7 +154,7 @@ impl DevicePool {
     /// This can happen if `reset()` has not been called to start monitoring.
     /// # Example
     /// ```rust
-    /// let pool = DevicePool::new(vec!["device1.toml".to_string()], 0.1);
+    /// let pool = DevicePool::new(HashMap::new(), 0.1, DeviceButtonMode::Hold);
     /// let current_state = pool.fetch_nowait()?;
     /// ```
     pub fn fetch_nowait(&self) -> Result<HashMap<String, JoystickState>, String> {
@@ -202,7 +202,7 @@ impl DevicePool {
     /// Returns an error if the device monitoring is not running or if the operation times out.
     /// # Example
     /// ```rust
-    /// let pool = DevicePool::new(vec!["device1.toml".to_string()], 0.1);
+    /// let pool = DevicePool::new(HashMap::new(), 0.1, DeviceButtonMode::Hold);
     /// let current_state = pool.fetch(Some(Duration::from_secs(5))).await?;
     /// ```
     pub async fn fetch(
@@ -265,7 +265,7 @@ impl DevicePool {
     ///
     /// # Example
     /// ```rust
-    /// let mut pool = DevicePool::new(vec!["device1.toml".to_string()], 0.1);
+    /// let mut pool = DevicePool::new(HashMap::new(), 0.1, DeviceButtonMode::Hold);
     /// pool.reset_input_register();
     /// ```
     fn reset_input_register(&self) {
@@ -286,16 +286,16 @@ impl DevicePool {
     ///
     /// # Example
     /// ```rust
-    /// let pool = DevicePool::new(vec!["device1.toml".to_string()], 0.1);
+    /// let pool = DevicePool::new(HashMap::new(), 0.1, DeviceButtonMode::Hold);
     /// pool.reset_trigger_register();
     /// ```
     fn reset_trigger_register(&self) {
         let mut input_register = self.input_register.lock().unwrap();
-        for (_device_name, input_data) in input_register.iter_mut() {
-            for (_button_key, button_value) in input_data.buttons.iter_mut() {
+        for input_data in input_register.values_mut() {
+            for button_value in input_data.buttons.values_mut() {
                 *button_value = 0;
             }
-            for (_hat_key, hat_value) in input_data.hats.iter_mut() {
+            for hat_value in input_data.hats.values_mut() {
                 *hat_value = 0;
             }
         }
@@ -309,7 +309,7 @@ impl DevicePool {
     ///
     /// # Example
     /// ```rust
-    /// let mut pool = DevicePool::new(vec!["device1.toml".to_string()], 0.1);
+    /// let mut pool = DevicePool::new(HashMap::new(), 0.1, DeviceButtonMode::Hold);
     /// pool.start_monitoring().await;
     /// ```
     async fn start_monitoring(&mut self) {
@@ -370,7 +370,7 @@ impl DevicePool {
     ///
     /// # Example
     /// ```rust
-    /// let mut pool = DevicePool::new(vec!["device1.toml".to_string()], 0.1);
+    /// let mut pool = DevicePool::new(HashMap::new(), 0.1, DeviceButtonMode::Hold);
     /// pool.stop_monitoring().await;
     /// ```
     async fn stop_monitoring(&mut self) {
@@ -512,7 +512,7 @@ impl DevicePool {
     ///
     /// # Example
     /// ```rust
-    /// let mut pool = DevicePool::new(vec!["device1.toml".to_string()], 0.1);
+    /// let mut pool = DevicePool::new(HashMap::new(), 0.1, DeviceButtonMode::Hold);
     /// pool.stop().await;
     /// ```
     /// # Returns

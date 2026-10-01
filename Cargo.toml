@@ -18,7 +18,8 @@ crate-type = [
 evdev = "0.13.2"
 log = "0.4.29"
 # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
-# "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
+# "abi3-py39" 把 pyo3 的最小编译 ABI 定在 CPython 3.9；它与 `requires-python >= 3.12`
+# 的安装约束相互独立，保留较低的 ABI 下限以获得更宽的 wheel 兼容性。
 pyo3 = { version = "0.28.2", features = [
     "extension-module",
     "abi3-py39",
