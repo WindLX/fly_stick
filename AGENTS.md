@@ -6,7 +6,7 @@ Linux evdev 操纵杆输入库，Rust/PyO3 提供设备 API，Python 提供封�
 
 - **约定**：命令以 `just --list` 为准；安装 `just setup`，格式/检查 `just fmt` / `just check`，测试 `just test-rust` / `just test-python` / `just test`，交付 `just pre-commit`。
 - **约定**：wheel 构建使用 `just build`；本项目仅支持 Linux 输入后端。
-- `rust/`、`python/` —— 设备访问、PyO3 接口与用户封装
+- `src/`、`src/fly_stick/` —— 设备访问、PyO3 接口与用户封装
 
 ## 本目录特有边界
 
