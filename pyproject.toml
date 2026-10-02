@@ -25,6 +25,7 @@ build-backend = "maturin"
 
 [dependency-groups]
 dev = [
+    "maturin>=1.0,<2.0",
     "mypy>=2.0.0",
     "pytest>=9.0.2",
     "ruff>=0.11.0",
