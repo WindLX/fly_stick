@@ -24,7 +24,8 @@ wheel 的 ABI 标签是 `abi3`，下限定在 CPython 3.9（`packages/fly_stick/
 ## 从 PyPI 安装
 
 ```bash
-pip install fly-stick
+uv add fly-stick        # 写进项目依赖
+pip install fly-stick   # 不用 uv 时
 ```
 
 发布流程只构建 Linux wheel：工作流在 `ubuntu-latest` 上跑 `x86_64` 与 `aarch64` 两个目标，并启用 `manylinux: auto` （`packages/fly_stick/.github/workflows/release.yml:12-17`、`:31-37`）；打 `v*.*.*` 标签后把 wheel 与 sdist 传到 PyPI 的 `fly-stick` 项目（`packages/fly_stick/.github/workflows/release.yml:3-6`、`:73-93`）。
