@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3_async_runtimes::tokio::future_into_py;
@@ -71,14 +71,13 @@ impl PyDevicePool {
         };
         let inner = Arc::clone(&self.inner);
         let mut pending = self.pending_fetch.lock().unwrap();
-        let completed_token = match pending.as_ref() {
-            Some((token, future)) if future.bind(py).call_method0("done")?.extract::<bool>()? => {
-                Some(*token)
+        if let Some((token, future)) = pending.as_ref() {
+            if !future.bind(py).call_method0("done")?.extract::<bool>()? {
+                return Err(PyRuntimeError::new_err(
+                    "another fetch() call is already waiting on this device pool",
+                ));
             }
-            _ => None,
-        };
-        if let Some(token) = completed_token {
-            self.inner.release_fetch(token);
+            inner.release_fetch(*token);
             *pending = None;
         }
         let guard = inner.reserve_fetch().map_err(|error| error.to_pyerr())?;
@@ -125,5 +124,34 @@ impl PyDevicePool {
     #[getter]
     pub fn devices(&self) -> HashMap<String, (DeviceDescription, JoystickInfo)> {
         self.inner.get_devices()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::DeviceButtonMode;
+    use pyo3::types::PyAnyMethods;
+
+    #[test]
+    fn pending_python_future_blocks_fetch_after_rust_slot_was_released() {
+        Python::initialize();
+        Python::attach(|py| {
+            let pool = PyDevicePool::new(HashMap::new(), 0.0, DeviceButtonMode::Hold).unwrap();
+            let guard = pool.inner.reserve_fetch().unwrap();
+            let token = guard.token();
+            drop(guard);
+
+            let asyncio = py.import("asyncio").unwrap();
+            let event_loop = asyncio.call_method0("new_event_loop").unwrap();
+            let python_future = event_loop.call_method0("create_future").unwrap();
+            *pool.pending_fetch.lock().unwrap() = Some((token, python_future.unbind()));
+
+            let error = pool.fetch(py, None).unwrap_err();
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert!(error.to_string().contains("another fetch() call"));
+            assert!(pool.pending_fetch.lock().unwrap().is_some());
+            event_loop.call_method0("close").unwrap();
+        });
     }
 }
