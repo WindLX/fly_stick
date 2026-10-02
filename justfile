@@ -12,16 +12,16 @@ default:
 
 setup:
     uv sync --group dev
-    uv run maturin develop
+    uv run --no-sync maturin develop
 
 # 就地格式化 Rust 与 Python 源码：cargo fmt 与 ruff format。
-# 只处理 src/fly_stick、tests 与 examples 三个目录。
+# 处理 src/fly_stick、tests、examples 与 scripts。
 #
 # 就地格式化 Rust 与 Python 源码
 
 fmt:
     cargo fmt --all
-    uv run ruff format src/fly_stick tests examples
+    uv run --no-sync ruff format src/fly_stick tests examples scripts
 
 # 静态检查：cargo fmt --check、cargo clippy（警告即错误）、
 # ruff check、ruff format --check 与 mypy。
@@ -30,11 +30,12 @@ fmt:
 # 跑全部静态检查
 
 check:
+    uv run --no-sync python scripts/check_versions.py
     cargo fmt --all -- --check
     cargo clippy --all-targets --all-features -- -D warnings
-    uv run ruff check src/fly_stick tests examples
-    uv run ruff format src/fly_stick tests examples --check
-    uv run mypy src/fly_stick tests
+    uv run --no-sync ruff check src/fly_stick tests examples scripts
+    uv run --no-sync ruff format src/fly_stick tests examples scripts --check
+    uv run --no-sync mypy src/fly_stick tests scripts
 
 # 完整测试：先跑 Rust 单测，再重建扩展模块跑 Python 测试。
 # 测试不依赖真实硬件。
@@ -49,7 +50,7 @@ test: _test-rust _test-python
 # 构建 release wheel
 
 build:
-    uv run maturin build --release
+    uv run --no-sync maturin build --release
 
 # 提交前把静态检查、测试与构建依次跑一遍。
 # 与根仓库的 just check-stick / just test-stick 覆盖范围一致。
@@ -65,12 +66,12 @@ pre-commit: check test build
 # 只跑 Rust 单测
 
 _test-rust:
-    cargo test --all-features
+    cargo test --no-default-features
 
 # 重建扩展模块后只跑 Python 测试，主要是导出面冒烟。
 #
 # 重建扩展后只跑 Python 测试
 
 _test-python:
-    uv run maturin develop
-    uv run pytest tests
+    uv run --no-sync maturin develop
+    uv run --no-sync pytest tests

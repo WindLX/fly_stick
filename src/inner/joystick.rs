@@ -26,6 +26,28 @@ pub struct Joystick {
     axis_info: HashMap<evdev::AbsoluteAxisCode, (i32, i32)>,
 }
 
+#[derive(Debug, Default)]
+pub struct JoystickEvents {
+    pub delta: JoystickState,
+    pub button_events: Vec<(u16, bool)>,
+}
+
+impl JoystickEvents {
+    fn record_button(&mut self, code: u16, value: i32) {
+        match value {
+            1 => {
+                self.delta.buttons.insert(code, 1);
+                self.button_events.push((code, true));
+            }
+            0 => {
+                self.delta.buttons.insert(code, 0);
+                self.button_events.push((code, false));
+            }
+            _ => {}
+        }
+    }
+}
+
 impl Joystick {
     /// Creates a new Joystick instance by opening the specified device.
     ///
@@ -83,16 +105,16 @@ impl Joystick {
         })
     }
 
-    /// Reads the current state of the joystick device.
+    /// Reads the event delta from the joystick device.
     ///
-    /// Fetches all pending events from the device and processes them to determine
-    /// the current state of axes, buttons, and hat switches. Axes values are normalized
-    /// to the range [-1.0, 1.0]. Button values are 0 (released) or 1 (pressed).
-    /// Hat switches return -1, 0, or 1 for each axis depending on their position.
+    /// Fetches pending events from the device. The returned maps contain only codes
+    /// changed in this read; use `DevicePool` when a persistent full snapshot is needed.
+    /// Axis values are normalized to [-1.0, 1.0]. Button values are 0 or 1, with
+    /// evdev repeat events ignored. Hat axes return -1, 0, or 1.
     ///
     /// # Returns
     ///
-    /// Returns a JoystickState containing:
+    /// Returns an event-delta JoystickState containing:
     /// * axes: Maps axis codes to normalized float values [-1.0, 1.0]
     /// * buttons: Maps button codes to integer values (0 or 1)
     /// * hats: Maps hat codes to integer values (-1, 0, or 1)
@@ -106,21 +128,19 @@ impl Joystick {
     /// This method uses non-blocking reads, so it will return immediately even if
     /// no events are available.
     pub fn get_state(&mut self) -> Result<JoystickState, std::io::Error> {
-        let mut axes_data = HashMap::new();
-        let mut buttons_data = HashMap::new();
-        let mut hats_data = HashMap::new();
+        self.get_events().map(|events| events.delta)
+    }
+
+    pub fn get_events(&mut self) -> Result<JoystickEvents, std::io::Error> {
+        let mut events = JoystickEvents::default();
 
         match self.device.fetch_events() {
-            Ok(events) => {
-                for event in events {
+            Ok(fetch_events) => {
+                for event in fetch_events {
                     match event.destructure() {
                         evdev::EventSummary::Key(_, key_type, value) => {
                             if self.buttons.contains(&key_type) {
-                                if value == 1 {
-                                    buttons_data.insert(key_type.code(), 1);
-                                } else {
-                                    buttons_data.insert(key_type.code(), 0);
-                                }
+                                events.record_button(key_type.code(), value);
                             }
                         }
                         evdev::EventSummary::AbsoluteAxis(_, axis, value) => {
@@ -128,7 +148,7 @@ impl Joystick {
                                 let normalized =
                                     (value - min) as f32 / (max - min) as f32 * 2.0 - 1.0;
                                 if self.axes.contains(&axis) {
-                                    axes_data.insert(axis.0, normalized);
+                                    events.delta.axes.insert(axis.0, normalized);
                                 } else if self.hats.contains(&axis) {
                                     let value = if value < 0 {
                                         -1
@@ -137,7 +157,7 @@ impl Joystick {
                                     } else {
                                         0
                                     };
-                                    hats_data.insert(axis.0, value);
+                                    events.delta.hats.insert(axis.0, value);
                                 }
                             }
                         }
@@ -153,10 +173,24 @@ impl Joystick {
             }
         }
 
-        Ok(JoystickState {
-            axes: axes_data,
-            buttons: buttons_data,
-            hats: hats_data,
-        })
+        Ok(events)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn button_repeat_is_not_a_release_and_delta_keeps_last_edge() {
+        let mut events = JoystickEvents::default();
+        events.record_button(288, 1);
+        events.record_button(288, 2);
+        assert_eq!(events.delta.buttons.get(&288), Some(&1));
+        assert_eq!(events.button_events, vec![(288, true)]);
+
+        events.record_button(288, 0);
+        assert_eq!(events.delta.buttons.get(&288), Some(&0));
+        assert_eq!(events.button_events, vec![(288, true), (288, false)]);
     }
 }

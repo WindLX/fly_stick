@@ -14,14 +14,21 @@ pub struct JoystickInfo {
     pub name: String,
 }
 
+#[pymethods]
+impl JoystickInfo {
+    #[new]
+    pub fn new(path: String, name: String) -> Self {
+        Self { path, name }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 #[pyclass(from_py_object)]
 /// Represents input data from a joystick or game controller device.
 ///
-/// This structure contains the current state of all input elements including
-/// analog axes, buttons, and directional hats. Each input type is stored in
-/// a HashMap where the key represents the hardware identifier and the value
-/// represents the current state.
+/// This structure contains axes, button, and hat values. `PyJoystick.get_state()`
+/// returns values from this read's event delta; `PyDevicePool` returns accumulated
+/// snapshots. Each map is keyed by a hardware code.
 ///
 /// # Fields
 ///
@@ -252,16 +259,10 @@ pub fn fetch_connected_joysticks() -> Vec<JoystickInfo> {
     device_list
 }
 
-/// Represents the mode of operation for device buttons in the DevicePool.
-/// This enum defines how button presses are handled:
-/// - `Trigger`: The button press is registered only when the button is pressed down, then the state will be reset immediately after.
-///   This mode is suitable for actions that should only occur once per press, such as firing a shot or triggering an event.
-///   The button state will not remain active after the initial press.
-/// - `Hold`: The button press is registered continuously while the button is held down.
-////// This enum is used to configure the behavior of buttons in the DevicePool,
-/// allowing for different interaction styles depending on the application requirements.
-/// The mode can be set when creating a DevicePool instance,
-/// and it affects how button events are processed during input handling.
+/// Controls how the device pool presents button states.
+/// `Trigger` delivers a press pulse once per reader cursor, merging presses that
+/// occurred between observations. `Hold` returns the current physical button state.
+/// Hat and axis states remain persistent in both modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[pyclass(from_py_object)]
 pub enum DeviceButtonMode {

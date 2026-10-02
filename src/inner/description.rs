@@ -60,6 +60,7 @@ pub struct DeviceItem {
 /// ```
 impl DeviceItem {
     #[new]
+    #[pyo3(signature = (code, alias = None))]
     pub fn new(code: u16, alias: Option<String>) -> Self {
         Self { code, alias }
     }
@@ -75,7 +76,8 @@ impl DeviceItem {
 ///
 /// # Fields
 ///
-/// * `device_name` - The name of the device (defaults to a predefined value if not specified)
+/// * `device_name` - The required system device name (defaults to Unknown Device)
+/// * `device_path` - Optional node path used to disambiguate devices with the same name
 /// * `author` - Optional author information for the device configuration
 /// * `created` - Optional creation date/time information
 /// * `description` - Optional detailed description of the device
@@ -100,6 +102,9 @@ pub struct DeviceDescription {
     #[serde(default = "default_device_name")]
     #[pyo3(get)]
     pub device_name: String,
+    #[serde(default)]
+    #[pyo3(get)]
+    pub device_path: Option<String>,
     #[pyo3(get)]
     pub author: Option<String>,
     #[pyo3(get)]
@@ -148,6 +153,8 @@ fn default_device_name() -> String {
 /// ```
 impl DeviceDescription {
     #[new]
+    #[pyo3(signature = (device_name=None, author=None, created=None, description=None, axes=None, buttons=None, hats=None, device_path=None))]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         device_name: Option<String>,
         author: Option<String>,
@@ -156,16 +163,22 @@ impl DeviceDescription {
         axes: Option<Vec<DeviceItem>>,
         buttons: Option<Vec<DeviceItem>>,
         hats: Option<Vec<DeviceItem>>,
-    ) -> Self {
-        Self {
+        device_path: Option<String>,
+    ) -> PyResult<Self> {
+        let description = Self {
             device_name: device_name.unwrap_or_else(default_device_name),
+            device_path,
             author,
             created,
             description,
             axes: axes.unwrap_or_default(),
             buttons: buttons.unwrap_or_default(),
             hats: hats.unwrap_or_default(),
-        }
+        };
+        description
+            .validate()
+            .map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)?;
+        Ok(description)
     }
 
     /// Create a DeviceDescription instance from a TOML file.
@@ -181,6 +194,9 @@ impl DeviceDescription {
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
         let device: DeviceDescription = toml::from_str(&content)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+        device
+            .validate()
+            .map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)?;
         Ok(device)
     }
 
@@ -208,10 +224,56 @@ impl DeviceDescription {
 }
 
 impl DeviceDescription {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.device_name.trim().is_empty() {
+            return Err("device_name must not be empty".to_string());
+        }
+        if self
+            .device_path
+            .as_ref()
+            .is_some_and(|path| path.trim().is_empty())
+        {
+            return Err("device_path must not be empty when provided".to_string());
+        }
+        for (kind, items) in [
+            ("axes", &self.axes),
+            ("buttons", &self.buttons),
+            ("hats", &self.hats),
+        ] {
+            let mut codes = std::collections::HashSet::new();
+            let mut keys = std::collections::HashSet::new();
+            for item in items {
+                if !codes.insert(item.code) {
+                    return Err(format!("duplicate {kind} code {}", item.code));
+                }
+                let key = item.alias.as_deref().unwrap_or("");
+                if item
+                    .alias
+                    .as_ref()
+                    .is_some_and(|alias| alias.trim().is_empty())
+                {
+                    return Err(format!("{kind} alias must not be empty"));
+                }
+                let key = if key.is_empty() {
+                    item.code.to_string()
+                } else {
+                    key.to_string()
+                };
+                if !keys.insert(key.clone()) {
+                    return Err(format!("duplicate {kind} alias key {key:?}"));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Create a DeviceDescription instance from a TOML file (Rust-only version).
     pub fn from_toml_rust(toml_file: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let content = fs::read_to_string(toml_file)?;
         let device: DeviceDescription = toml::from_str(&content)?;
+        device
+            .validate()
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
         Ok(device)
     }
 }
@@ -251,9 +313,12 @@ mod tests {
             Some(vec![DeviceItem::new(0, Some("X".to_string()))]),
             Some(vec![DeviceItem::new(1, Some("Button A".to_string()))]),
             Some(vec![DeviceItem::new(2, Some("Hat".to_string()))]),
-        );
+            Some("/dev/input/event0".to_string()),
+        )
+        .unwrap();
 
         assert_eq!(desc.device_name, "Test Device");
+        assert_eq!(desc.device_path.as_deref(), Some("/dev/input/event0"));
         assert_eq!(desc.author, Some("Test Author".to_string()));
         assert_eq!(desc.created, Some("2023-01-01".to_string()));
         assert_eq!(desc.description, Some("Test Description".to_string()));
@@ -264,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_device_description_defaults() {
-        let desc = DeviceDescription::new(None, None, None, None, None, None, None);
+        let desc = DeviceDescription::new(None, None, None, None, None, None, None, None).unwrap();
         assert_eq!(desc.device_name, "Unknown Device");
         assert_eq!(desc.author, None);
         assert_eq!(desc.created, None);
@@ -272,11 +337,45 @@ mod tests {
         assert!(desc.axes.is_empty());
         assert!(desc.buttons.is_empty());
         assert!(desc.hats.is_empty());
+        assert_eq!(desc.device_path, None);
+    }
+
+    #[test]
+    fn test_device_description_validation_rejects_duplicate_code_and_key() {
+        let duplicate_code = DeviceDescription::new(
+            None,
+            None,
+            None,
+            None,
+            Some(vec![
+                DeviceItem::new(1, None),
+                DeviceItem::new(1, Some("roll".to_string())),
+            ]),
+            None,
+            None,
+            None,
+        );
+        assert!(duplicate_code.is_err());
+
+        let duplicate_key = DeviceDescription::new(
+            None,
+            None,
+            None,
+            None,
+            Some(vec![
+                DeviceItem::new(1, None),
+                DeviceItem::new(2, Some("1".to_string())),
+            ]),
+            None,
+            None,
+            None,
+        );
+        assert!(duplicate_key.is_err());
     }
 
     #[test]
     fn test_build_state_empty() {
-        let desc = DeviceDescription::new(None, None, None, None, None, None, None);
+        let desc = DeviceDescription::new(None, None, None, None, None, None, None, None).unwrap();
         let input_data = desc.build_state();
         assert!(input_data.axes.is_empty());
         assert!(input_data.buttons.is_empty());
@@ -293,7 +392,9 @@ mod tests {
             Some(vec![DeviceItem::new(0, None), DeviceItem::new(1, None)]),
             Some(vec![DeviceItem::new(2, None)]),
             Some(vec![DeviceItem::new(3, None)]),
-        );
+            None,
+        )
+        .unwrap();
 
         let input_data = desc.build_state();
 
@@ -396,7 +497,9 @@ invalid toml content
             Some(vec![DeviceItem::new(0, Some("X".to_string()))]),
             None,
             None,
-        );
+            None,
+        )
+        .unwrap();
 
         let serialized = toml::to_string(&desc).unwrap();
         let deserialized: DeviceDescription = toml::from_str(&serialized).unwrap();
@@ -405,5 +508,26 @@ invalid toml content
         assert_eq!(desc.author, deserialized.author);
         assert_eq!(desc.axes.len(), deserialized.axes.len());
         assert_eq!(desc.axes[0].code, deserialized.axes[0].code);
+    }
+
+    #[test]
+    fn test_toml_optional_device_path_roundtrip() {
+        let desc = DeviceDescription::new(
+            Some("Test Device".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("/dev/input/event5".to_string()),
+        )
+        .unwrap();
+        let serialized = toml::to_string(&desc).unwrap();
+        let deserialized: DeviceDescription = toml::from_str(&serialized).unwrap();
+        assert_eq!(
+            deserialized.device_path.as_deref(),
+            Some("/dev/input/event5")
+        );
     }
 }

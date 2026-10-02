@@ -4,6 +4,8 @@
 实际实现位于 Rust 侧 `src/` 下的绑定代码。
 """
 
+from asyncio import Future
+
 class JoystickInfo:
     """单个操纵杆设备的基本信息。
 
@@ -25,7 +27,7 @@ class JoystickInfo:
         ...
 
 class JoystickState:
-    """一次采样得到的完整操纵杆状态。
+    """轴、按键与方向帽状态；完整快照或本轮事件差分由读取方法决定。
 
     包含按硬件 code 索引的轴、按键与帽开关（POV）数值。
 
@@ -204,12 +206,13 @@ class DeviceItem:
 class DeviceDescription:
     """完整描述一个操纵杆或手柄设备的输入布局。
 
-    保存设备元数据（名称、作者、创建日期、说明）以及全部输入元素（轴、
+    保存设备元数据（名称、可选设备路径、作者、创建日期、说明）以及全部输入元素（轴、
     按键、帽开关）。既可从 TOML 文件加载，也可据此构造初始
     `JoystickState`。
 
     Attributes:
         device_name: 设备名称；未提供时默认为 `"Unknown Device"`。
+        device_path: 可选的 evdev 设备路径；同名设备不唯一时用它消歧。
         author: 设备描述的作者。
         created: 设备描述的创建日期或时间戳。
         description: 设备详细说明。
@@ -228,6 +231,7 @@ class DeviceDescription:
     """
 
     device_name: str
+    device_path: str | None
     author: str | None
     created: str | None
     description: str | None
@@ -244,6 +248,7 @@ class DeviceDescription:
         axes: list[DeviceItem] | None = None,
         buttons: list[DeviceItem] | None = None,
         hats: list[DeviceItem] | None = None,
+        device_path: str | None = None,
     ) -> None:
         """构造设备描述。
 
@@ -255,6 +260,7 @@ class DeviceDescription:
             axes: 轴输入项；为 `None` 时使用空列表。
             buttons: 按键输入项；为 `None` 时使用空列表。
             hats: 帽开关输入项；为 `None` 时使用空列表。
+            device_path: 设备节点路径；为 `None` 时按唯一名称匹配。
         """
         ...
     @staticmethod
@@ -286,7 +292,7 @@ class DeviceDescription:
 class PyJoystick:
     """单个操纵杆设备的高层封装。
 
-    打开指定 evdev 设备并记录其轴、按键与帽开关能力，提供阻塞式状态读取；
+    打开指定 evdev 设备并记录其轴、按键与帽开关能力，提供非阻塞的事件差分读取；
     设备生命周期由该对象持有。
 
     Args:
@@ -310,7 +316,7 @@ class PyJoystick:
         """
         ...
     def get_state(self) -> JoystickState:
-        """读取一次当前状态。
+        """非阻塞地读取本批事件差分。
 
         Returns:
             JoystickState: 本次采样的轴、按键与帽开关数值。
@@ -324,12 +330,12 @@ class PyDevicePool:
     """多个操纵杆设备的异步状态池。
 
     按逻辑名称管理一组 `DeviceDescription`，异步初始化设备、合并各设备的
-    输入状态并执行按键去抖；状态通过 `fetch` 系列方法获取。
+    输入事件为完整快照并执行按键按下去抖；状态通过 `fetch` 系列方法获取。
 
     Args:
         device_descs: 逻辑设备名到设备描述的映射。
         debounce_seconds: 按键去抖间隔，单位秒；默认为 0.1。
-        btn_mode: 按键触发模式，默认为 `hold`。
+        button_mode: 按键触发模式，默认为 `Hold`。
 
     Examples:
         ```python
@@ -361,35 +367,43 @@ class PyDevicePool:
         self,
         device_descs: dict[str, DeviceDescription],
         debounce_seconds: float = 0.1,
-        btn_mode: DeviceButtonMode = ...,
+        button_mode: DeviceButtonMode = ...,
     ) -> None:
         """记录设备描述、去抖时长与按键语义模式，设备在 `reset()` 中打开。
 
         Args:
             device_descs: 逻辑设备名到设备描述的映射。
-            debounce_seconds: 按键与帽开关的去抖时长，单位秒。
-            btn_mode: 按键语义模式，决定读取后是否清空按键与帽。
+            debounce_seconds: 按钮按下边沿的去抖时长，单位秒；释放、轴与方向帽
+                不受去抖影响。
+            button_mode: 按键语义模式。
         """
         ...
-    async def reset(self) -> dict[str, tuple[DeviceDescription, JoystickInfo]]:
-        """按注册的设备描述初始化设备池并启动事件循环。
+    def reset(self) -> Future[dict[str, tuple[DeviceDescription, JoystickInfo]]]:
+        """重新枚举、匹配并预打开全部设备，成功后启动监控。
 
         必须在调用 `fetch` 系列方法之前等待本方法完成。
 
         Returns:
-            dict[str, tuple[DeviceDescription, JoystickInfo]]: 逻辑设备名到
-            `(设备描述, 设备信息)` 的映射。
+            可等待的 Future；完成结果为逻辑设备名到 `(设备描述, 设备信息)` 的映射。
+
+        Raises:
+            LookupError: 某个描述没有匹配设备。
+            ValueError: 名称匹配不唯一或配置重复。
+            OSError: 任一设备打开失败；此时整个池保持停止。
         """
         ...
 
     def fetch_nowait(self) -> dict[str, JoystickState]:
-        """非阻塞地返回各设备最近一次的状态。
+        """非阻塞地返回各设备当前完整快照。
+
+        本方法有独立读取进度；调用它不会消费 `fetch()` 等待的变化。
 
         Returns:
-            dict[str, JoystickState]: 逻辑设备名到当前状态的映射。
+            可等待的 Future；完成结果为逻辑设备名到当前完整快照的映射。
 
         Raises:
             RuntimeError: 设备池尚未初始化或已停止时抛出。
+            OSError: 监视设备发生读取故障时抛出，故障会停止整个池。
 
         Examples:
             ```python
@@ -400,26 +414,35 @@ class PyDevicePool:
         """
         ...
 
-    async def fetch(
+    def fetch(
         self, timeout_seconds: float | None = None
-    ) -> dict[str, JoystickState]:
-        """等待状态变化或超时，然后返回各设备状态。
+    ) -> Future[dict[str, JoystickState]]:
+        """等待状态变化或超时，然后返回各设备当前完整快照。
+
+        同一设备池同时只允许一个 `fetch()` 等待；取消等待会释放该限制。
+        `Trigger` 模式下每次按下会对每种读取入口锁存为一次脉冲；多次按下在
+        两次观察之间合并为一个脉冲。`fetch()` 与 `fetch_nowait()` 的进度独立。
 
         Args:
             timeout_seconds: 超时秒数；`None` 表示一直等待。
 
         Returns:
-            dict[str, JoystickState]: 逻辑设备名到当前状态的映射。
+            可等待的 Future；完成结果为逻辑设备名到当前完整快照的映射。
 
         Raises:
-            RuntimeError: 设备池未初始化、已停止或等待超时时抛出。
+            RuntimeError: 设备池未运行，或已有另一 `fetch()` 等待。
+            TimeoutError: 超时。
+            OSError: 监控时设备读失败；整个池停止，需显式调用 `reset()` 恢复。
         """
 
-    async def stop(self) -> None:
+    def stop(self) -> Future[None]:
         """停止设备池并释放设备与后台任务。
 
+        Returns:
+            可等待的 Future；全部监控任务退出并释放设备后以 `None` 完成。
+
         Note:
-            设备池不再使用时务必调用本方法以完成清理。
+            设备池不再使用时务必等待本方法完成清理。
         """
         ...
 

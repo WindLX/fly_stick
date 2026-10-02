@@ -14,6 +14,7 @@ alias = "ABS_Y"
 
 [[axes]]
 code = 2
+alias = "ABS_Z"
 
 [[axes]]
 code = 3
