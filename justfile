@@ -62,11 +62,16 @@ pre-commit: check test build
 # ───────── 单项入口（私有，不在 just --list 里）─────────
 
 # 只跑 Rust 单测：TOML 解析、别名映射与设备描述默认值。
+# pyo3 会把 libpython 链进测试可执行文件，而 uv 管理的 CPython 既不在系统库搜索路径里、
+# 也需要 PYTHONHOME 才能让内嵌解释器找到标准库，所以这里把解释器与两处路径都固定下来。
 #
 # 只跑 Rust 单测
 
 _test-rust:
-    cargo test --no-default-features
+    PYO3_PYTHON="$PWD/.venv/bin/python" \
+        PYTHONHOME="$(uv run --no-sync python -c 'import sys; print(sys.base_prefix)')" \
+        LD_LIBRARY_PATH="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+        cargo test --no-default-features
 
 # 重建扩展模块后只跑 Python 测试，主要是导出面冒烟。
 #
