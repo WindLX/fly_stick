@@ -6,105 +6,143 @@ on:
       - "v*.*.*"
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
+  verify-source:
+    name: Verify tag, source, and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: latest
+          enable-cache: true
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install locked development dependencies
+        run: uv sync --locked --group dev
+      - name: Install just
+        run: cargo install just --locked
+      - name: Check package versions
+        run: uv run --no-sync python scripts/check_versions.py
+      - name: Match tag to package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          uv run --no-sync python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          metadata = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          package_version = metadata["project"]["version"]
+          tag_version = os.environ["RELEASE_TAG"].removeprefix("v")
+          if tag_version != package_version:
+              raise SystemExit(
+                  f"Release tag {tag_version!r} does not match package version {package_version!r}"
+              )
+          print(f"Release tag matches package version {package_version}")
+          PY
+      - name: Static checks
+        run: just check
+      - name: Source tests without joystick hardware
+        run: just test
+
   build-wheels:
-    name: Build Linux wheels
+    name: Build Linux ${{ matrix.target }} wheel
+    needs: verify-source
     runs-on: ubuntu-latest
     strategy:
       matrix:
         target: [x86_64, aarch64]
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v10
         with:
-          version: "latest"
-
+          version: latest
       - name: Install Python
         run: uv python install 3.12
-
-      - name: Install dependencies
-        run: uv sync
-
-      - name: Build wheels
+      - name: Validate locked build environment
+        run: uv sync --locked --no-dev --no-install-project
+      - name: Install QEMU for aarch64 cross compilation
+        if: matrix.target == 'aarch64'
+        run: sudo apt-get update && sudo apt-get install -y qemu-user
+      - name: Build wheel
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          manylinux: auto
-          args: --release --out dist
+          manylinux: 2_28
+          args: --release --out dist --compatibility pypi
           sccache: "true"
-
-      - name: Upload wheels
+      - name: Upload wheel
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.target }}
+          name: wheel-linux-${{ matrix.target }}
           path: dist/*.whl
+          if-no-files-found: error
+          retention-days: 7
 
   build-sdist:
     name: Build source distribution
+    needs: verify-source
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
-
-      - name: Install Python
-        run: uv python install 3.12
-
-      - name: Install dependencies
-        run: uv sync
-
+      - uses: actions/checkout@v6
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
           args: --out dist
-
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
           name: sdist
           path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
 
   publish-pypi:
     name: Publish to PyPI
-    runs-on: ubuntu-latest
     needs: [build-wheels, build-sdist]
+    runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/p/fly-stick
     permissions:
       id-token: write
     steps:
-      - name: Download all artifacts
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-
-      - name: Publish to PyPI
-        uses: PyO3/maturin-action@v1
+      - name: Publish with PyPI Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          command: upload
-          args: --non-interactive --skip-existing dist/*
+          packages-dir: dist/
 
   github-release:
     name: Create GitHub Release
-    runs-on: ubuntu-latest
     needs: [build-wheels, build-sdist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Download all artifacts
+      - uses: actions/checkout@v6
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*
-          generate_release_notes: true
+          body_path: CHANGELOG.md

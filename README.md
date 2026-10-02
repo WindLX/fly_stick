@@ -70,6 +70,8 @@ asyncio.run(main())
 
 ## 文档与开发
 
+版本变更与升级说明见 [`CHANGELOG.md`](CHANGELOG.md)。
+
 - 用户手册：`docs/guide/` —— 安装、设备枚举、设备描述、设备池、按键模式、模型接入与排障。
 - 开发者手册：`docs/dev/` —— 架构分层、实现细节、设备描述契约、扩展方式与接口参考。
 - 接口声明：`src/fly_stick/_core.pyi` 是全部公开类型的签名与说明，`examples/` 里的可运行脚本是配套样例。
