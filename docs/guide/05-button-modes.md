@@ -7,7 +7,9 @@
 ```python
 from fly_stick import DeviceButtonMode, DeviceDescription, PyDevicePool
 
-pool = PyDevicePool({"stick": DeviceDescription.from_toml("devices/Thrustmaster/t16000m.toml")})
+pool = PyDevicePool(
+    {"stick": DeviceDescription.from_toml("devices/Thrustmaster/t16000m.toml")}
+)
 ```
 
 默认模式是 `DeviceButtonMode.hold()`。按键按住期间快照值为 `1`，收到释放事件后变为 `0`；每次读取都反映当前状态。方向帽的 X/Y 方向值也会一直保留，直到收到中立值 `0`。
