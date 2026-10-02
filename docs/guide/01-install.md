@@ -4,10 +4,10 @@
 
 ## 环境前提
 
-- 操作系统为 Linux。扩展模块本身带平台门槛：`_core` 的定义外层是 `#[cfg(target_os = "linux")]` （`packages/fly_stick/src/lib.rs:7-9`）。
+- 操作系统为 Linux。扩展模块本身带平台门槛：`_core` 的定义外层是 `#[cfg(target_os = "linux")]` （`packages/fly_stick/src/lib.rs`）。
 - Python 3.12 及以上（`packages/fly_stick/pyproject.toml:9`）。
 - 从源码安装需要 Rust 工具链与 `uv`：`just setup` 的两条命令分别依赖它们（`packages/fly_stick/justfile:6-8`）。
-- 当前用户对目标设备节点有读权限。设备在 `Device::open` 处打开（`packages/fly_stick/src/inner/joystick.rs:48`），该调用返回的 `std::io::Error` 由 PyO3 按 `ErrorKind` 映射，权限不足对应 `PermissionError` （PyO3 0.28.2 的 `src/err/impls.rs:46-65`，由 `packages/fly_stick/Cargo.toml:23-26` 引入）。
+- 当前用户对目标设备节点有读权限。设备在 `Device::open` 处打开（`packages/fly_stick/src/inner/joystick.rs`），该调用返回的 `std::io::Error` 由 PyO3 按 `ErrorKind` 映射，权限不足对应 `PermissionError` （PyO3 0.28.2 的 `src/err/impls.rs`，由 `packages/fly_stick/Cargo.toml:23-26` 引入）。
 - 只有 Linux 才值得装：其他平台上 `_core` 不会被编译出来。
 
 ## 发行名与导入名
@@ -37,7 +37,7 @@ python -c "import fly_stick; print(fly_stick.__all__)"
 
 `__all__` 一共 8 个名字（`packages/fly_stick/src/fly_stick/__init__.py:18-27`），仓库里的 Python 测试断言它与模块实际导出一致（`packages/fly_stick/tests/test_import.py:5-22`）。
 
-在非 Linux 上，`import fly_stick` 会失败在 `from fly_stick._core import ...` 这一行（`packages/fly_stick/src/fly_stick/__init__.py:7`），报 `ModuleNotFoundError: No module named 'fly_stick._core'`，因为该扩展只在 Linux 目标下定义（`packages/fly_stick/src/lib.rs:7-9`）。这是缺模块的导入错误，不是构建警告。
+在非 Linux 上，`import fly_stick` 会失败在 `from fly_stick._core import ...` 这一行（`packages/fly_stick/src/fly_stick/__init__.py:7`），报 `ModuleNotFoundError: No module named 'fly_stick._core'`，因为该扩展只在 Linux 目标下定义（`packages/fly_stick/src/lib.rs`）。这是缺模块的导入错误，不是构建警告。
 
 ## 从源码安装
 
@@ -58,9 +58,9 @@ print(len(fetch_connected_joysticks()))"
 
 ### 没有硬件时能验证到什么
 
-- `just test-rust` 跑 `cargo test --all-features` （`packages/fly_stick/justfile:21-22`）。Rust 测试不碰设备：例如用 `DeviceDescription::from_toml_rust` 配合临时文件解析TOML（`packages/fly_stick/src/inner/description.rs:212`、`:219-224`）。
+- `just test-rust` 跑 `cargo test --all-features` （`packages/fly_stick/justfile:21-22`）。Rust 测试不碰设备：例如用 `DeviceDescription::from_toml_rust` 配合临时文件解析TOML（`packages/fly_stick/src/inner/description.rs`、`:219-224`）。
 - `just test-python` 先 `uv run maturin develop` 再 `uv run pytest tests` （`packages/fly_stick/justfile:24-26`）；当前 Python 测试只检查导入与导出面（`packages/fly_stick/tests/test_import.py:17-22`）。
-- 直接调用 `fetch_connected_joysticks()` 也安全：没有可读设备时它返回空列表，不抛异常（`packages/fly_stick/src/utils.rs:239-253`）。
+- 直接调用 `fetch_connected_joysticks()` 也安全：没有可读设备时它返回空列表，不抛异常（`packages/fly_stick/src/utils.rs`）。
 
 ## 在模型示例里安装
 

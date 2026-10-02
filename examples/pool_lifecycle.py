@@ -1,7 +1,7 @@
 """演示 PyDevicePool 的生命周期与可调参数。
 
-依次展示构造时的设备匹配、``debounce_time`` 与 ``button_mode`` 属性、未 ``reset()``
-时 ``fetch_nowait()`` 抛 ``RuntimeError`` 而 ``fetch()`` 返回陈旧快照、``reset()``
+依次展示描述与设备匹配、``debounce_time`` 与 ``button_mode`` 属性、未 ``reset()``
+时两个读取入口都抛 ``RuntimeError``、``reset()``
 的返回值、运行时切换按键模式，以及 ``stop()`` 之后两个读取接口的行为。
 
 需要硬件：匹配的设备越多观察越完整；没有匹配设备时池是空的，生命周期流程仍会完整
@@ -73,7 +73,7 @@ def print_pool_summary(pool: PyDevicePool) -> None:
     """打印设备池的设备匹配、去抖时长与按键模式。
 
     Args:
-        pool: 待检查的设备池；设备匹配在构造时就已完成，这里不依赖 ``reset()``。
+        pool: 待检查的设备池；设备匹配在 ``reset()`` 中完成。
     """
     devices = pool.devices
     print(f"  pool.devices       = {sorted(devices)}")
@@ -100,7 +100,7 @@ async def run(profile: Path, debounce: float, mode: str, timeout: float) -> int:
     pool = PyDevicePool(
         {LOGICAL_NAME: desc},
         debounce_seconds=debounce,
-        btn_mode=DeviceButtonMode(mode),
+        button_mode=DeviceButtonMode(mode),
     )
     print(f"描述设备：{desc.device_name!r}（逻辑名 {LOGICAL_NAME}）")
     print("[构造完成，尚未 reset()]")
@@ -108,9 +108,11 @@ async def run(profile: Path, debounce: float, mode: str, timeout: float) -> int:
     stopped = False
 
     try:
-        stale = await pool.fetch(timeout_seconds=timeout)
         print("[未 reset() 时读取]")
-        print(f"  await pool.fetch() -> {sorted(stale)}；返回陈旧快照，不报错")
+        try:
+            await pool.fetch(timeout_seconds=timeout)
+        except RuntimeError as error:
+            print(f"  await pool.fetch() -> RuntimeError: {error}")
         try:
             pool.fetch_nowait()
         except RuntimeError as error:
@@ -124,8 +126,7 @@ async def run(profile: Path, debounce: float, mode: str, timeout: float) -> int:
             print(f"    {logical}: {matched_desc.device_name!r} @ {info.path}")
         print(f"  fetch_nowait() 此时可用：{sorted(pool.fetch_nowait())}")
         if not devices:
-            print(f"  池中没有设备：{NO_DEVICE_HINT}")
-            print("  （库同时在 stderr 打印一行 `Device ... not found` 的警告。）")
+            print("设备描述为空；没有注册逻辑设备。")
 
         switched = "trigger" if mode == "hold" else "hold"
         pool.button_mode = DeviceButtonMode(switched)
@@ -139,16 +140,19 @@ async def run(profile: Path, debounce: float, mode: str, timeout: float) -> int:
             pool.fetch_nowait()
         except RuntimeError as error:
             print(f"  fetch_nowait() -> RuntimeError: {error}")
-        after = await pool.fetch(timeout_seconds=timeout)
-        print(f"  await pool.fetch() -> {sorted(after)}；同样是陈旧快照，不报错")
+        try:
+            await pool.fetch(timeout_seconds=timeout)
+        except RuntimeError as error:
+            print(f"  await pool.fetch() -> RuntimeError: {error}")
+    except (LookupError, OSError, ValueError) as error:
+        print(f"设备池启动失败：{type(error).__name__}: {error}")
     except KeyboardInterrupt:
         print("收到中断，停止设备池。")
     finally:
         if not stopped:
             await pool.stop()
 
-    print("提示：库没有 close()，停止监控用 stop()；reset() 不会重新枚举设备，")
-    print("      热插拔换设备后需要新建 PyDevicePool。")
+    print("提示：stop() 等待监控任务退出并释放所有设备；reset() 会重新枚举并匹配设备。")
     return 0
 
 

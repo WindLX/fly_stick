@@ -23,8 +23,8 @@ uv run python examples/fly_stick_gtm.py --dry-run --no-stick --no-proto
 
 - 默认 profile 是脚本同目录下的 `fly_stick_profiles/t16000m.toml` （`models/fr_gtm/examples/fly_stick_gtm.py:54-56`），由 `--profile` 覆盖。
 - `DeviceDescription.from_toml(str(args.profile))` 读取设备描述（`models/fr_gtm/examples/fly_stick_gtm.py:406`）。
-- `PyDevicePool(device_descs={args.logical_name: desc}, debounce_seconds=0.02)` （`models/fr_gtm/examples/fly_stick_gtm.py:407-410`）：描述以逻辑名 `stick` 为键，去抖 0.02 秒；未传 `btn_mode`，因此按 `Hold` 工作，见 [按钮模式](/guide/components/fly_stick/05-button-modes)。
-- `devices = await pool.reset()` 返回匹配到的设备表；逻辑名不在其中时先 `await pool.stop()` 再抛 `RuntimeError` （`models/fr_gtm/examples/fly_stick_gtm.py:412-416`）。
+- `PyDevicePool(device_descs={args.logical_name: desc}, debounce_seconds=0.02)` （`models/fr_gtm/examples/fly_stick_gtm.py:407-410`）：描述以逻辑名 `stick` 为键，去抖 0.02 秒；未传 `button_mode`，因此按 `Hold` 工作，见 [按钮模式](/guide/components/fly_stick/05-button-modes)。
+- `await pool.reset()` 重新枚举、匹配并启动全部设备；成功时返回逻辑名到 `(DeviceDescription, JoystickInfo)` 的映射。当前模型示例不需要这个返回值。未匹配设备由 `reset()` 抛 `LookupError`；无需手工检查 key 或先停止池（`models/fr_gtm/examples/fly_stick_gtm.py:412`）。
 
 设备池按 `device_name` 与设备名精确相等匹配，细节见 [设备池](/guide/components/fly_stick/04-device-pool)。
 
@@ -37,7 +37,7 @@ state = None if pool is None else pool.fetch_nowait().get(args.logical_name)
 axes, buttons = _read_alias_input(state, desc)
 ```
 
-`_read_alias_input()` 只认识几个别名（`models/fr_gtm/examples/fly_stick_gtm.py:202-220`）：轴取 `ABS_X`、`ABS_Y`、`ABS_RZ`、`ABS_THROTTLE`，按键取 `BTN_TRIGGER`，缺失的轴留 `None`，数值经 `_clip_unit()` 限幅到 `[-1, 1]` （`models/fr_gtm/examples/fly_stick_gtm.py:73-78`）。别名与 code 的对应关系来自 profile 的 `[[axes]]` / `[[buttons]]` 小节，`get_alias_axes()` 与 `get_alias_buttons()` 只会交出这次读取命中的键（`packages/fly_stick/src/utils.rs:163-202`）。
+`_read_alias_input()` 只认识几个别名（`models/fr_gtm/examples/fly_stick_gtm.py:202-220`）：轴取 `ABS_X`、`ABS_Y`、`ABS_RZ`、`ABS_THROTTLE`，按键取 `BTN_TRIGGER`，缺失的轴留 `None`，数值经 `_clip_unit()` 限幅到 `[-1, 1]` （`models/fr_gtm/examples/fly_stick_gtm.py:73-78`）。别名与 code 的对应关系来自 profile 的 `[[axes]]` / `[[buttons]]` 小节，`get_alias_axes()` 与 `get_alias_buttons()` 只会交出这次读取命中的键（`packages/fly_stick/src/utils.rs`）。
 
 ## StickAxes 是纯数据类
 
@@ -55,7 +55,7 @@ F-16 示例的差别主要在油门：它把 `[-1, 1]` 先映射到 `[0, 1]`，�
 
 ## profile 文件
 
-两个示例各带一份 `t16000m.toml` （92 行），内容只有 `created` 与 `description` 两行不同。顶层字段为 `device_name`、`author`、`created`、`description`，输入项写在 `[[axes]]`、`[[buttons]]`、`[[hats]]` 小节中，每项 `code` 必填、`alias` 可选；没有 `alias` 的项在别名字典里以十进制 code 字符串为键（`packages/fly_stick/src/utils.rs:207-222`）。字段语义见[设备描述](/guide/components/fly_stick/03-device-description)。
+两个示例各带一份 `t16000m.toml` （92 行），内容只有 `created` 与 `description` 两行不同。顶层字段为 `device_name`、`author`、`created`、`description`，输入项写在 `[[axes]]`、`[[buttons]]`、`[[hats]]` 小节中，每项 `code` 必填、`alias` 可选；没有 `alias` 的项在别名字典里以十进制 code 字符串为键（`packages/fly_stick/src/utils.rs`）。字段语义见[设备描述](/guide/components/fly_stick/03-device-description)。
 
 ## 收尾
 

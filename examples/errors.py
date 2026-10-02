@@ -3,7 +3,8 @@
 覆盖 ``PyJoystick`` 打开设备的两类 ``OSError``（路径不存在、无读权限）、
 ``DeviceDescription.from_toml()`` 的 ``OSError`` 与 ``ValueError``、
 ``DeviceButtonMode("...")`` 的 ``ValueError``，以及未 ``reset()`` 或已 ``stop()``
-时 ``fetch_nowait()`` 的 ``RuntimeError``。每个分支都打印中文说明。
+时两个读取入口的 ``RuntimeError``，和运行中等待超时的 ``TimeoutError``。每个分支
+都打印中文说明。
 
 不需要操纵杆；只有无读权限分支要求当前用户不是 root（root 会绕过权限位）。
 
@@ -136,18 +137,24 @@ def demo_device_node(device: Path) -> None:
 
 
 async def demo_pool_states() -> None:
-    """演示未 ``reset()`` 与已 ``stop()`` 时两个读取接口的差别。"""
+    """演示未启动、运行、超时与停止后的读取错误。"""
     pool = PyDevicePool({})
     print("[演示] 未 reset() 就读取空设备池：")
     try:
         pool.fetch_nowait()
     except RuntimeError as error:
         print(f"  fetch_nowait() -> RuntimeError: {error}")
-    before = await pool.fetch(timeout_seconds=0.1)
-    print(f"  await pool.fetch() -> {before}（返回陈旧快照，不报错）")
+    try:
+        await pool.fetch(timeout_seconds=0.1)
+    except RuntimeError as error:
+        print(f"  await pool.fetch() -> RuntimeError: {error}")
 
     await pool.reset()
     print(f"[演示] reset() 之后：fetch_nowait() -> {pool.fetch_nowait()}")
+    try:
+        await pool.fetch(timeout_seconds=0.0)
+    except TimeoutError as error:
+        print(f"  await pool.fetch(timeout_seconds=0) -> TimeoutError: {error}")
     await pool.stop()
 
     print("[演示] stop() 之后：")
@@ -155,9 +162,10 @@ async def demo_pool_states() -> None:
         pool.fetch_nowait()
     except RuntimeError as error:
         print(f"  fetch_nowait() -> RuntimeError: {error}")
-    after = await pool.fetch(timeout_seconds=0.1)
-    print(f"  await pool.fetch() -> {after}（同样是陈旧快照，不报错）")
-    print("  空设备池返回 {}；匹配到设备时这里给出的是寄存器里的旧状态，仍不报错。")
+    try:
+        await pool.fetch(timeout_seconds=0.1)
+    except RuntimeError as error:
+        print(f"  await pool.fetch() -> RuntimeError: {error}")
 
 
 def main() -> int:

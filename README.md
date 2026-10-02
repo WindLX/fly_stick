@@ -51,11 +51,12 @@ from fly_stick import DeviceDescription, PyDevicePool
 async def main() -> None:
     desc = DeviceDescription.from_toml("devices/Thrustmaster/t16000m.toml")
     pool = PyDevicePool(device_descs={"stick": desc})
-    if "stick" not in await pool.reset():
-        return
-    state = pool.fetch_nowait()["stick"]
-    print(state.get_alias_axes(desc).get("ABS_X"))
-    await pool.stop()
+    try:
+        await pool.reset()
+        state = pool.fetch_nowait()["stick"]
+        print(state.get_alias_axes(desc).get("ABS_X"))
+    finally:
+        await pool.stop()
 
 
 asyncio.run(main())
@@ -64,6 +65,8 @@ asyncio.run(main())
 ## 示例
 
 `examples/` 按由简到繁排列，包含枚举设备、多设备、设备池的阻塞与非阻塞读取、按键模式、别名、设备描述构造与异常解剖；无硬件时也能跑通其中三个。阅读顺序与运行命令见 `examples/README.md`。
+
+`PyJoystick.get_state()` 返回本次 evdev 读取的事件差分；设备池将事件合并成完整快照。设备池每次 `reset()` 都重新枚举，名称必须唯一匹配，可用描述中的 `device_path` 消歧。`stop()` 等待监视任务退出并释放所有设备句柄。
 
 ## 文档与开发
 

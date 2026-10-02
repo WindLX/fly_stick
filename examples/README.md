@@ -15,8 +15,8 @@
   见 `/guide/components/fly_stick/01-install`，排查步骤见
   `/guide/components/fly_stick/07-troubleshooting`。
 - 设备描述文件在仓库的 `packages/fly_stick/devices/` 下；示例默认使用
-  `devices/Thrustmaster/ta320.toml`，可用 `--profile` 换成别的文件。设备池按描述文件里的
-  `device_name` 与真实设备名**精确相等**匹配，名字对不上时池是空的，只打印提示。
+  `devices/Thrustmaster/ta320.toml`，可用 `--profile` 换成别的文件。设备池要求名称唯一匹配；
+  同名设备有多个时，在描述中用 `device_path` 指定节点。匹配失败时 `reset()` 抛异常。
 
 所有命令都在 `packages/fly_stick/` 目录下执行。
 
@@ -28,10 +28,10 @@
 | 2 | `multi_device.py` | 一轮循环里同时读多台设备；`--name` 可重复，匹配不上的设备提示并跳过 | `/guide/components/fly_stick/02-enumerate-devices` | `uv run python examples/multi_device.py --name "设备名"` | 提示后退出 0 |
 | 3 | `device_pool.py` | 设备池入门：`reset()` 后用阻塞的 `await pool.fetch()` 等状态变化 | `/guide/components/fly_stick/04-device-pool` | `uv run python examples/device_pool.py --profile devices/Thrustmaster/ta320.toml` | 提示后退出 0 |
 | 4 | `device_pool_block.py` | 仿真循环里的非阻塞写法：每个控制周期用 `fetch_nowait()` 取当前状态 | `/guide/components/fly_stick/04-device-pool`、`/guide/components/fly_stick/06-model-integration` | `uv run python examples/device_pool_block.py --profile devices/Thrustmaster/ta320.toml` | 提示后退出 0 |
-| 5 | `btn_mode.py` | `DeviceButtonMode.Hold` 与 `Trigger` 的差别：Trigger 每次读取后清零按键与帽 | `/guide/components/fly_stick/05-button-modes` | `uv run python examples/btn_mode.py --profile devices/Thrustmaster/ta320.toml` | 提示后退出 0 |
+| 5 | `btn_mode.py` | `DeviceButtonMode.Hold` 与 `Trigger` 的差别：Trigger 为每个读取入口保留按下脉冲；帽状态持久 | `/guide/components/fly_stick/05-button-modes` | `uv run python examples/btn_mode.py --profile devices/Thrustmaster/ta320.toml` | 提示后退出 0 |
 | 6 | `alias.py` | 描述文件里的 `alias` 与 `to_alias_dict()` / `get_alias_axes()` 等按别名取键；没有别名的 code 用 `str(code)` 作键 | `/guide/components/fly_stick/03-device-description`、`/guide/components/fly_stick/04-device-pool` | `uv run python examples/alias.py --profile devices/Thrustmaster/ta320.toml` | 打印别名表后退出 0 |
 | 7 | `describe_device.py` | 纯数据：构造 `DeviceDescription` 与 `DeviceItem`、`build_state()` 零状态、`from_toml()` 的两类解析错误 | `/guide/components/fly_stick/03-device-description` | `uv run python examples/describe_device.py --profile devices/Thrustmaster/ta320.toml` | 完整跑完，退出 0 |
-| 8 | `pool_lifecycle.py` | 设备池生命周期：构造时的设备匹配、`debounce_time` 与 `button_mode`、`reset()`、运行时切换模式、`stop()`；库没有 `close()`，`reset()` 不会重新枚举设备 | `/guide/components/fly_stick/04-device-pool` | `uv run python examples/pool_lifecycle.py --profile devices/Thrustmaster/ta320.toml` | 完整跑完，池为空，退出 0 |
+| 8 | `pool_lifecycle.py` | 设备池生命周期：`reset()` 重枚举并全量预打开、`debounce_time` 与 `button_mode`、运行时切换和 `stop()` | `/guide/components/fly_stick/04-device-pool` | `uv run python examples/pool_lifecycle.py --profile devices/Thrustmaster/ta320.toml` | 完整跑完，退出 0 |
 | 9 | `errors.py` | 异常解剖：`FileNotFoundError`、`PermissionError`、`from_toml()` 的 `OSError`/`ValueError`、非法按键模式的 `ValueError`、未 `reset()` 时 `fetch_nowait()` 的 `RuntimeError` | `/guide/components/fly_stick/07-troubleshooting` | `uv run python examples/errors.py` | 完整跑完，退出 0 |
 
 ## 无硬件时能跑到什么程度
@@ -41,15 +41,14 @@
 | `describe_device.py` | 全程不碰设备：构造对象、取零状态、用临时文件制造解析错误。任何环境都能完整跑完。 |
 | `errors.py` | 全程不要求操纵杆：不存在的路径、权限位为 000 的临时文件、坏 TOML、非法模式、空设备池。以 root 运行时无读权限分支会落到 `OSError`（权限位被绕过），脚本同样按中文说明打印。 |
 | `alias.py` | 先打印描述文件里的 code 与别名对照表，找不到匹配设备时在这里退出。 |
-| `pool_lifecycle.py` | 设备匹配在构造时就完成，之后的 `reset()`、模式切换、`stop()`、停止后的读取行为都会照常演示。 |
+| `pool_lifecycle.py` | 有匹配设备时演示完整生命周期；无匹配设备时显示 `LookupError` 后退出。 |
 | `btn_mode.py` | 没有匹配设备时在建立设备池之前退出；`--help` 不碰设备。 |
 | `single_device.py`、`multi_device.py`、`device_pool.py`、`device_pool_block.py` | 没有设备时打印中文原因后退出 0；`--list` 可以只枚举设备名与路径。 |
 
 ## 约定
 
-- 设备池的读取接口有两条路径：`await pool.fetch(...)` 会等待状态变化或超时，适合主循环；
-  `pool.fetch_nowait()` 立即返回最近一次状态，但它要求设备池已经在运行，未 `reset()` 或
-  已 `stop()` 时抛 `RuntimeError`。两者共用同一份输入寄存器，混用会互相吞掉变化。
-- 设备池不再使用时调用 `await pool.stop()`；库没有 `close()`。`stop()` 之后再读取只会
-  拿到陈旧快照，不会报错。
-- 设备热插拔后要新建 `PyDevicePool`，`reset()` 不会重新枚举设备。
+- `await pool.fetch(...)` 等待状态变化，超时抛 `TimeoutError`；`pool.fetch_nowait()` 立即
+  返回最新完整快照。两者读取进度独立，可混用。一个池同一时间只允许一个 `fetch()` 等待。
+- 设备池不再使用时调用 `await pool.stop()`；它等待监视任务退出并释放设备。停止后再读取抛
+  `RuntimeError`。运行中设备故障会停止整个池并抛 `OSError`；修复后显式 `reset()` 恢复。
+- 每次 `reset()` 都重新枚举；运行中不自动重连。

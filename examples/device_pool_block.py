@@ -10,11 +10,11 @@
 `fetch_nowait()` 与 `await pool.fetch()` 的差别（后者见 `device_pool.py`）：
 
 - `fetch_nowait()` 不阻塞；设备池尚未 `reset()` 时抛 `RuntimeError`。
-- `await fetch(timeout_seconds=...)` 会等到状态变化或超时，超时同样抛 `RuntimeError`。
-- 两个 API 共用同一份「上次输入」记录，混用会互相吞掉对方看到的变化。
+- `await fetch(timeout_seconds=...)` 会等到状态变化或超时，超时抛 `TimeoutError`。
+- 两个 API 的读取进度独立，混用不会消费对方的变化。
 
-设备池按 `info.name == desc.device_name` 精确匹配设备节点，匹配不上只提示不报错，
-所以运行前要确认描述文件里的 `device_name` 与已连接设备的名称一致。
+设备池按名称唯一匹配设备；同名设备多个时需要在描述文件指定 `device_path`。
+匹配失败由 `reset()` 抛出 `LookupError` 或 `ValueError`。
 
 需要什么硬件：一个与所选描述文件 `device_name` 完全同名的操纵杆或手柄。没有设备、
 名字不匹配或描述文件读不到时，示例打印中文原因后返回，退出码为 0。
@@ -156,10 +156,10 @@ async def main(argv: list[str] | None = None) -> int:
         {logical_name: description},
         debounce_seconds=args.debounce,
     )
-    matched = await pool.reset()
-    if not matched:
-        print("设备池没有匹配到任何设备，退出。")
-        await pool.stop()
+    try:
+        matched = await pool.reset()
+    except (LookupError, OSError, ValueError) as error:
+        print(f"设备池启动失败：{type(error).__name__}: {error}")
         return 0
 
     for name, (_description, info) in matched.items():
@@ -183,10 +183,10 @@ async def main(argv: list[str] | None = None) -> int:
             await asyncio.sleep(max(0.0, next_tick - time.monotonic()))
     except KeyboardInterrupt:
         print("\n已停止监控。")
-    except RuntimeError as error:
-        print(f"设备池未在运行：{error}")
+    except (OSError, RuntimeError) as error:
+        print(f"设备池停止读取：{error}")
     finally:
-        # 库没有 close()，停止监控和释放设备统一用 stop()。
+        # 停止监控并等待设备句柄释放。
         await pool.stop()
     return 0
 

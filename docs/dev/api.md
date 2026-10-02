@@ -1,27 +1,23 @@
 # 接口参考
 
-`fly_stick` 的公开面是八个对象：`src/fly_stick/__init__.py:7-16` 从编译扩展 `fly_stick._core` 导入，并由同文件的 `__all__`（`:18-27`）对外声明。签名与逐成员说明写在与扩展同名的类型存根 `packages/fly_stick/src/fly_stick/_core.pyi` 里，逐条列表见 [API 参考](/api/fly_stick/)；本章说明这些对象各承担什么、怎么组合，以及读签名时要注意的边界。
+`fly_stick` 导出设备枚举、单设备事件读取、设备描述和多设备状态池。签名与逐成员 docstring 位于 `src/fly_stick/_core.pyi`；自动 API 页面提供完整参数和类型。
 
 ## 公开对象
 
-| 对象 | 存根位置 | 职责 |
-| --- | --- | --- |
-| `fetch_connected_joysticks()` | `_core.pyi:108` | 枚举当前可读的输入设备，返回 `JoystickInfo` 列表；打不开的节点直接跳过。 |
-| `JoystickInfo` | `_core.pyi:7` | 设备的 `path` 与 `name`，枚举结果的元素，不手工构造。 |
-| `JoystickState` | `_core.pyi:27` | 一次读取的结果：`axes`、`buttons`、`hats` 三个 `code → 值` 映射；`to_dict()` 直接取映射，其余方法按设备描述投影成别名键。 |
-| `DeviceButtonMode` | `_core.pyi:127` | 按键语义：`Trigger` 命中即复位，`Hold` 保持到释放；用 `DeviceButtonMode("trigger")` 或 `DeviceButtonMode("hold")` 构造。 |
-| `DeviceItem` | `_core.pyi:184` | 描述文件里的一条「别名 → code」条目。 |
-| `DeviceDescription` | `_core.pyi:204` | 一份 TOML 设备描述；`from_toml()` 读取文件，`build_state()` 生成全零状态。 |
-| `PyJoystick` | `_core.pyi:286` | 单个设备对象，`get_state()` 返回这次调用读到的事件。 |
-| `PyDevicePool` | `_core.pyi:323` | 多设备状态池：`reset()` 启动监控，`fetch_nowait()` 与 `fetch()` 取状态，`stop()` 停止。 |
+| 对象 | 职责 |
+| --- | --- |
+| `fetch_connected_joysticks()` | 返回当前枚举设备的 `JoystickInfo(path, name)` 列表。 |
+| `JoystickInfo` | 设备路径和系统名称，可由调用方构造。 |
+| `JoystickState` | 轴、按键、方向帽映射；单设备读取给事件差分，设备池给完整快照。 |
+| `PyJoystick` | 打开一个设备；`get_state()` 同步读取当前读取批次的事件差分。 |
+| `DeviceItem` | 一个分类内的 code 与可选 alias。 |
+| `DeviceDescription` | 设备名、可选路径与轴/按键/帽布局；可从 TOML 或 Python 构造。 |
+| `DeviceButtonMode` | 设备池的 Hold/Trigger 按键呈现模式。 |
+| `PyDevicePool` | 重新枚举、匹配并监视多设备，提供快照读取。 |
 
 ## 组合方式
 
-单设备用 `PyJoystick`：拿 `fetch_connected_joysticks()` 返回的 `path` 构造，轮询 `get_state()`。需要阻塞等待或同时管理多个设备时用 `PyDevicePool`：把「逻辑名 → `DeviceDescription`」交给构造函数，`reset()` 之后按逻辑名取 `JoystickState`。
-
-别名投影需要描述对象本身：`state.get_alias_axes(desc)` 把 `code → 值` 换成 `别名 → 值`，没写 `alias` 的条目保留数字字符串键。想枚举描述声明的全部输入项，取 `DeviceDescription.build_state()` 生成零状态的键集合即可。
-
-按键语义在池的构造函数里选定，运行时可读可写 `pool.button_mode`；去抖窗口用 `pool.debounce_time` 读取。设备清单用 `pool.devices` 查看，键是逻辑名，值是描述对象与 `JoystickInfo` 的组合。
+单设备调用 `PyJoystick(path).get_state()` 获取本次事件；需要保留状态时由调用方合并差分。设备池内部完成该合并：构造时提供逻辑名到描述的字典，`await pool.reset()` 重新枚举并打开全部设备，随后用 `pool.fetch_nowait()` 或 `await pool.fetch()` 读取完整快照，最后 `await pool.stop()` 等待设备释放。
 
 ```python
 import asyncio
@@ -31,25 +27,34 @@ from fly_stick import DeviceButtonMode, DeviceDescription, PyDevicePool
 
 async def main() -> None:
     desc = DeviceDescription.from_toml("devices/Thrustmaster/t16000m.toml")
-    pool = PyDevicePool(device_descs={"stick": desc}, btn_mode=DeviceButtonMode.trigger())
-    if "stick" not in await pool.reset():
-        return
-    state = pool.fetch_nowait()["stick"]
-    print(state.get_alias_axes(desc))
-    await pool.stop()
+    pool = PyDevicePool(
+        device_descs={"stick": desc},
+        button_mode=DeviceButtonMode.hold(),
+    )
+    try:
+        devices = await pool.reset()
+        state = await pool.fetch(timeout_seconds=1.0)
+        print(devices["stick"][1].path, state["stick"].get_alias_axes(desc))
+    finally:
+        await pool.stop()
 
 
 asyncio.run(main())
 ```
 
-## 读签名时的边界
+`fetch()` 与 `fetch_nowait()` 有独立读取进度，混用不会消费对方的变化。Trigger 每个入口单独观察脉冲；多次未观察的按下合并为一个。一个池同时只允许一个阻塞 `fetch()`，取消它会释放等待槽。超时抛 `TimeoutError`。
 
-- 存根给出声明，行为细节以 `src/` 的 Rust 实现为准：设备池没有 `close()`，`stop()` 是唯一停止入口；停止后 `fetch_nowait()` 抛 `RuntimeError`，而 `fetch()` 返回最后一次快照。
-- 轴取值 `[-1, 1]` 且不参与去抖；按键 `0/1`、帽 `-1/0/1` 参与去抖，细节见 [按键模式](/guide/components/fly_stick/05-button-modes)。
-- `DeviceItem` 与 `DeviceDescription` 的位置参数在 Rust 侧没有默认值，实例化时要写全，字段见 [设备描述契约](/dev/components/fly_stick/03-device-description-contract)。
+`reset()`、`fetch()` 和 `stop()` 可直接 `await`。它们由 PyO3 返回 `asyncio.Future`；若要用任务调度 `fetch()`，使用 `asyncio.ensure_future(pool.fetch())`，不要传给只接受 coroutine 的 `asyncio.create_task()`。
 
-## 继续阅读
+## 错误类别
 
-- 单个设备与池的调用路径：[架构与分层](/dev/components/fly_stick/01-architecture)
-- 池的行为与失败路径：[实现细节](/dev/components/fly_stick/02-implementation)
-- 改动公开面要同步哪些文件：[扩展点](/dev/components/fly_stick/04-extending)
+| 情况                                | Python 异常              |
+| ----------------------------------- | ------------------------ |
+| 描述没有匹配设备                    | `LookupError`            |
+| 名称歧义、重复设备路径或无效描述    | `ValueError`             |
+| 设备打开或运行中读取失败            | `OSError`                |
+| 池未运行或已有另一个 `fetch()` 等待 | `RuntimeError`           |
+| `fetch()` 超时                      | `TimeoutError`           |
+| TOML 文件读失败 / 内容无效          | `OSError` / `ValueError` |
+
+设备读取错误会停止整个池并释放全部设备；需显式 `reset()` 恢复。单个设备名不匹配不会部分启动池。

@@ -11,12 +11,12 @@
 
 - `await fetch(timeout_seconds=...)` 会等到状态变化；每轮都让出事件循环，
   适合「有输入才处理」的响应式主循环。指定 `--timeout` 后等待超时会抛
-  `RuntimeError`，示例打印中文原因后结束，退出码仍为 0。
-- `fetch_nowait()` 立即返回最近一次状态，不等待；设备池尚未 `reset()` 时抛
+  `TimeoutError`，示例打印中文原因后结束，退出码仍为 0。
+- `fetch_nowait()` 立即返回完整快照，不等待；设备池尚未 `reset()` 时抛
   `RuntimeError`。
 
-设备池按 `info.name == desc.device_name` 精确匹配设备节点，匹配不上只提示不报错，
-所以运行前要确认描述文件里的 `device_name` 与已连接设备的名称一致。
+设备池要求设备名唯一匹配；未匹配时 `reset()` 抛 `LookupError`，同名设备有多台时抛
+`ValueError` 并要求描述提供 `device_path`。
 
 需要什么硬件：一个与所选描述文件 `device_name` 完全同名的操纵杆或手柄。没有设备、
 名字不匹配或描述文件读不到时，示例打印中文原因后返回，退出码为 0。
@@ -156,10 +156,10 @@ async def main(argv: list[str] | None = None) -> int:
         {logical_name: description},
         debounce_seconds=args.debounce,
     )
-    matched = await pool.reset()
-    if not matched:
-        print("设备池没有匹配到任何设备，退出。")
-        await pool.stop()
+    try:
+        matched = await pool.reset()
+    except (LookupError, OSError, ValueError) as error:
+        print(f"设备池启动失败：{type(error).__name__}: {error}")
         return 0
 
     for name, (_description, info) in matched.items():
@@ -168,7 +168,7 @@ async def main(argv: list[str] | None = None) -> int:
     rounds = 0
     try:
         while args.iterations <= 0 or rounds < args.iterations:
-            # fetch 会阻塞到状态变化；指定 --timeout 后超时会抛 RuntimeError。
+            # fetch 会阻塞到状态变化；指定 --timeout 后超时会抛 TimeoutError。
             states = await pool.fetch(timeout_seconds=args.timeout)
             for name, state in states.items():
                 if state.axes or state.buttons or state.hats:
@@ -176,8 +176,10 @@ async def main(argv: list[str] | None = None) -> int:
             rounds += 1
     except KeyboardInterrupt:
         print("\n已停止监控。")
-    except RuntimeError as error:
+    except TimeoutError as error:
         print(f"等待状态变化失败：{error}")
+    except OSError as error:
+        print(f"设备读取失败：{error}")
     finally:
         # 库没有 close()，停止监控和释放设备统一用 stop()。
         await pool.stop()

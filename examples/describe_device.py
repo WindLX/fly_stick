@@ -89,26 +89,15 @@ def sorted_by_alias(values: dict[str, float | int]) -> dict[str, float | int]:
     return {key: values[key] for key in sorted(values)}
 
 
-def demo_constructor_arity() -> None:
-    """演示三个类型的构造参数必填性：省略参数都会抛 ``TypeError``。
-
-    ``_core.pyi`` 给 ``DeviceDescription`` 的七个参数和 ``DeviceItem`` 的
-    ``alias`` 标了默认值，但 Rust 侧的 ``#[new]`` 没有默认值，也没有给
-    ``JoystickInfo`` 提供构造函数，所以以下调用都会失败。
-    """
-    try:
-        DeviceDescription(device_name="X")
-    except TypeError as error:
-        print(f"[预期异常] DeviceDescription(device_name='X') -> TypeError: {error}")
-    try:
-        DeviceItem(0)
-    except TypeError as error:
-        print(f"[预期异常] DeviceItem(0) -> TypeError: {error}")
-    try:
-        JoystickInfo("a", "b")
-    except TypeError as error:
-        print(f"[预期异常] JoystickInfo('a', 'b') -> TypeError: {error}")
-    print("  JoystickInfo 只能由 fetch_connected_joysticks() 产生。")
+def demo_constructor_defaults() -> None:
+    """演示描述、输入项与设备信息构造器的可选参数。"""
+    desc = DeviceDescription(device_name="自定义设备")
+    item = DeviceItem(0)
+    info = JoystickInfo("/dev/input/event0", "自定义设备")
+    print("[构造器默认值]")
+    print(f"  DeviceDescription: {desc.device_name!r}, path={desc.device_path!r}")
+    print(f"  DeviceItem: code={item.code}, alias={item.alias!r}")
+    print(f"  JoystickInfo: {info.name!r} @ {info.path}")
 
 
 def build_demo_description() -> DeviceDescription:
@@ -205,7 +194,7 @@ def main() -> int:
         int: 进程退出码，恒为 0。
     """
     args = parse_args()
-    demo_constructor_arity()
+    demo_constructor_defaults()
     desc = build_demo_description()
     print(f"[内存构造] device_name={desc.device_name!r}")
     print(f"  author={desc.author!r} created={desc.created!r}")

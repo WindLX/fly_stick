@@ -13,11 +13,11 @@
 | 实现层 | `packages/fly_stick/src/inner/*.rs` | 设备枚举、监控任务、TOML 描述 |
 | 值类型层 | `packages/fly_stick/src/utils.rs` | 状态值对象、按键模式、别名映射 |
 
-`packages/fly_stick/src/lib.rs:12-21` 把 `PyDevicePool`、`PyJoystick`、`JoystickInfo`、`JoystickState`、`DeviceButtonMode`、`DeviceItem`、`DeviceDescription` 七个类与`fetch_connected_joysticks` 一个函数挂到模块上。
+`packages/fly_stick/src/lib.rs` 把 `PyDevicePool`、`PyJoystick`、`JoystickInfo`、`JoystickState`、`DeviceButtonMode`、`DeviceItem`、`DeviceDescription` 七个类与`fetch_connected_joysticks` 一个函数挂到模块上。
 
-模块声明本身不受平台门控，`packages/fly_stick/src/lib.rs:1-3` 无条件声明 `inner`、`utils`、`wrapper` 三个模块；只有 `#[pymodule]` 入口被 `#[cfg(target_os = "linux")]`覆盖（`packages/fly_stick/src/lib.rs:7-8`）。因此非 Linux 上依赖照样参与编译，缺的只是`PyInit__core` 这个模块初始化符号。
+模块声明本身不受平台门控，`packages/fly_stick/src/lib.rs` 无条件声明 `inner`、`utils`、`wrapper` 三个模块；只有 `#[pymodule]` 入口被 `#[cfg(target_os = "linux")]`覆盖（`packages/fly_stick/src/lib.rs`）。因此非 Linux 上依赖照样参与编译，缺的只是`PyInit__core` 这个模块初始化符号。
 
-依赖方向有一处例外值得注意：值类型层的 `packages/fly_stick/src/utils.rs:1` 反过来 `use`了实现层的 `DeviceDescription` 与 `DeviceItem`，因为别名映射需要读取描述项。所以`utils.rs` 与 `inner/description.rs` 是双向可见的一组类型，改动描述字段时两者要一起看。
+依赖方向有一处例外值得注意：值类型层的 `packages/fly_stick/src/utils.rs` 反过来 `use`了实现层的 `DeviceDescription` 与 `DeviceItem`，因为别名映射需要读取描述项。所以`utils.rs` 与 `inner/description.rs` 是双向可见的一组类型，改动描述字段时两者要一起看。
 
 ## Python 包面
 
@@ -27,43 +27,40 @@
 
 ## 异步模型
 
-异步运行时是 tokio，由 `pyo3-async-runtimes` 的 `tokio-runtime` 特性引入（`packages/fly_stick/Cargo.toml:27-29,34-36`）。边界层有两种入口形式：
+异步运行时是 Tokio，由 `pyo3-async-runtimes` 的 `tokio-runtime` 特性引入。`reset()`、`fetch()`、`stop()` 通过 `future_into_py` 返回可等待对象；`fetch_nowait()` 与属性读取同步取共享状态，不调用 `block_on`。边界实现见 `packages/fly_stick/src/wrapper/device_pool_wrapper.rs`。
 
-- 让 Python `await` 的方法用 `future_into_py` 返回 awaitable：`reset()`（`packages/fly_stick/src/wrapper/device_pool_wrapper.rs:34-41`）、`fetch()` （同文件`:61-83`）、`stop()` （同文件 `:85-92`）。
-- 同步方法与属性用 `get_runtime().block_on(...)` 就地阻塞调用线程：`fetch_nowait()`（同文件 `:43-59`）以及四个 getter/setter（同文件 `:94-129`）。
+`PyDevicePool` 用 `Arc<DevicePool>` 共享内部对象；`fetch()` 等待时不持有生命周期锁。原子占用标志拒绝第二个并行 `fetch()`；`fetch_nowait()` 使用独立读取游标，可与等待中的 `fetch()` 并行。边界实现见 `packages/fly_stick/src/wrapper/device_pool_wrapper.rs`。
 
-整个池被一把异步互斥锁包住：`packages/fly_stick/src/wrapper/device_pool_wrapper.rs:14-17` 里 `PyDevicePool`只持有一个 `Arc<tokio::sync::Mutex<DevicePool>>`。`fetch()` 在锁内部等待状态变化（同文件`:69-72` 到 `pool.fetch(...)`），所以在一次挂起的 `fetch()` 期间，其他`fetch_nowait()`、属性读取与 `reset()` 都会排队。同步 getter 走`block_on`，排队时阻塞的是调用它的 Python 线程。
-
-池内部为每个已匹配设备派生一个 tokio 任务，另有一个 supervisor 任务等待关停信号后`abort` 全部设备任务（`packages/fly_stick/src/inner/device_pool.rs:341-353` 与`:355-363`）。
+池为所有设备创建一个监视任务，由该任务独占全部 evdev 句柄。`stop()` 发信号并等待监视任务退出，因此返回时 fd 已释放。运行错误先清理所有设备，再通知读取者；下一次读取抛 `OSError`，显式 `reset()` 才能恢复。生命周期实现见 `packages/fly_stick/src/inner/device_pool.rs`。
 
 ## 数据流
 
 ```text
-evdev 枚举                     src/utils.rs:240-253
+evdev 枚举                     src/utils.rs
    │
    ▼
-构造池：按设备名精确匹配        src/inner/device_pool.rs:65-86
+reset()：重枚举、匹配并全量预打开   src/inner/device_pool.rs
    │  input_register = 各描述的零状态
    ▼
-reset()：每设备一个 tokio 任务  src/inner/device_pool.rs:134-143, 341-353
-   │  每 10 ms 轮询 get_state()
+单监视任务轮询全部设备           src/inner/device_pool.rs
+   │  每 10 ms 读取事件差分
    ▼
-input_register 增量合并         src/inner/device_pool.rs:437-467
+完整快照 + 按钮边沿计数         src/inner/device_pool.rs
    │
    ▼
-fetch() / fetch_nowait()        src/inner/device_pool.rs:160-187, 208-258
+fetch() / fetch_nowait()        src/inner/device_pool.rs, 208-258
    │
    ▼
-Python dict                     src/wrapper/device_pool_wrapper.rs:43-83
+Python dict                     src/wrapper/device_pool_wrapper.rs
 ```
 
 ## 轮询而不是事件驱动
 
-Rust 侧没有把 evdev 的读端挂到 epoll 或回调上，而是把设备设为非阻塞（`packages/fly_stick/src/inner/joystick.rs:51`），由监控循环每 10 ms 调一次`fetch_events()` （`packages/fly_stick/src/inner/joystick.rs:113`，循环节拍在`packages/fly_stick/src/inner/device_pool.rs:470`）。这意味着空转时每个设备每秒约产生一百次读取系统调用，输入延迟的下限也是这个轮询周期。
+Rust 侧没有把 evdev 的读端挂到 epoll 或回调上，而是把设备设为非阻塞（`packages/fly_stick/src/inner/joystick.rs`），由监控循环每 10 ms 调一次`fetch_events()` （`packages/fly_stick/src/inner/joystick.rs`，循环节拍在`packages/fly_stick/src/inner/device_pool.rs`）。这意味着空转时每个设备每秒约产生一百次读取系统调用，新事件被发现前可能等待一个轮询周期。
 
 ## 状态归属
 
-设备状态有两层：`get_state()` 返回的只是本次读取涉及的 code （`packages/fly_stick/src/inner/joystick.rs:108-161`）；池里的 `input_register`是跨轮次保留的持久快照，收到事件时只覆盖命中的键（`packages/fly_stick/src/inner/device_pool.rs:442-467`）。交给 Python 的`JoystickState` 是 Rust 侧 clone 出来的副本（`packages/fly_stick/src/wrapper/device_pool_wrapper.rs:51-53,74-78`），Python 修改它不会回写寄存器。别名读取只是在投影时换键（`packages/fly_stick/src/utils.rs:207-222`），不改变寄存器内容。
+设备状态分为差分和快照：`PyJoystick.get_state()` 返回当前读取批次的事件差分；池把它累积为完整设备快照。按下事件另计数，因此同批按下与释放仍可产生 Trigger 脉冲；轴、按键和帽的最终物理值仍由快照表示。返回 Python 的对象是副本；别名方法只映射字典键，不修改原始状态。实现在 `packages/fly_stick/src/inner/joystick.rs`、`packages/fly_stick/src/inner/device_pool.rs` 与 `packages/fly_stick/src/utils.rs`。
 
 evdev 只在两处被直接使用：单设备读写的 `inner/joystick.rs` 与枚举设备的`utils.rs:240-253`；池通过 `Joystick` 间接使用设备，不自己碰 evdev。
 

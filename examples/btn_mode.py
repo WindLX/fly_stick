@@ -82,12 +82,12 @@ def build_pools(desc: DeviceDescription) -> dict[str, PyDevicePool]:
         "Hold": PyDevicePool(
             {LOGICAL_NAME: desc},
             debounce_seconds=0.05,
-            btn_mode=DeviceButtonMode.hold(),
+            button_mode=DeviceButtonMode.hold(),
         ),
         "Trigger": PyDevicePool(
             {LOGICAL_NAME: desc},
             debounce_seconds=0.05,
-            btn_mode=DeviceButtonMode.trigger(),
+            button_mode=DeviceButtonMode.trigger(),
         ),
     }
 
@@ -128,9 +128,8 @@ async def run(profile: Path, rounds: int, timeout: float, interval: float) -> in
                 try:
                     states = await pool.fetch(timeout_seconds=timeout)
                     source = "fetch"
-                except RuntimeError:
-                    # fetch 与 fetch_nowait 共用同一份 last_input_register，
-                    # 这里只在 fetch 超时后读一次寄存器，不会吞掉下一次事件。
+                except TimeoutError:
+                    # 两个入口进度独立；nowait 仍可观察自己的脉冲。
                     states = pool.fetch_nowait()
                     source = "fetch_nowait"
                 state = states.get(LOGICAL_NAME)
