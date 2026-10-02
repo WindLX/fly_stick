@@ -1,3 +1,7 @@
+// pyo3 的 `#[pyclass(from_py_object)]` 会为 `Copy` 类型生成一次 `Clone::clone`。这个 impl 是
+// 宏展开出的兄弟项，写在枚举上的 `#[allow]` 覆盖不到，因此只能在 crate 级放宽这一条 lint。
+#![allow(clippy::clone_on_copy)]
+
 pub mod inner;
 pub mod utils;
 pub mod wrapper;

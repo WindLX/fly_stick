@@ -264,9 +264,6 @@ pub fn fetch_connected_joysticks() -> Vec<JoystickInfo> {
 /// occurred between observations. `Hold` returns the current physical button state.
 /// Hat and axis states remain persistent in both modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-// `from_py_object` expands to a `clone()` on this `Copy` enum, which newer clippy
-// reports as `clone_on_copy`; the generated call is not ours to remove.
-#[allow(clippy::clone_on_copy)]
 #[pyclass(from_py_object)]
 pub enum DeviceButtonMode {
     Trigger,
