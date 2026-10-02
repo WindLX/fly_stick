@@ -78,6 +78,8 @@ def build_pools(desc: DeviceDescription) -> dict[str, PyDevicePool]:
     Returns:
         dict[str, PyDevicePool]: 模式名到设备池的映射。
     """
+    # 两个池注册同一份描述、同一个逻辑名，唯一差别是按键模式；
+    # 去抖取 0.05 秒，短于示例的读取间隔，方便观察脉冲是否被保留。
     return {
         "Hold": PyDevicePool(
             {LOGICAL_NAME: desc},
@@ -108,6 +110,7 @@ async def run(profile: Path, rounds: int, timeout: float, interval: float) -> in
     print(f"描述文件：{profile}")
     print(f"设备名：{desc.device_name!r}（作者 {desc.author}，创建 {desc.created}）")
 
+    # 先按名称预检设备，避免把「设备没插」和「按键没按」两种情况混在一起。
     connected = fetch_connected_joysticks()
     matches = [info for info in connected if info.name == desc.device_name]
     if not matches:
@@ -117,10 +120,12 @@ async def run(profile: Path, rounds: int, timeout: float, interval: float) -> in
 
     info = matches[0]
     print(f"匹配设备：{info.name}（{info.path}）")
+    # build_pools() 只登记描述；两个池的设备都在各自 reset() 中打开。
     pools = build_pools(desc)
     print("按住设备上的任意按键，观察两种模式的差别；松开后两种模式都会回到 0。")
 
     try:
+        # 两个池并发 reset，串行等待会让启动时间翻倍。
         await asyncio.gather(*(pool.reset() for pool in pools.values()))
         for index in range(1, rounds + 1):
             readings: list[str] = []
@@ -132,6 +137,8 @@ async def run(profile: Path, rounds: int, timeout: float, interval: float) -> in
                     # 两个入口进度独立；nowait 仍可观察自己的脉冲。
                     states = pool.fetch_nowait()
                     source = "fetch_nowait"
+                # 超时轮次里 fetch_nowait 仍可能拿到本池尚未交付的脉冲，
+                # 因此两种模式的读数要分别看，不能互相替代。
                 state = states.get(LOGICAL_NAME)
                 # Rust 侧映射的迭代顺序不固定，排序后输出才可复现。
                 buttons = (
@@ -143,6 +150,7 @@ async def run(profile: Path, rounds: int, timeout: float, interval: float) -> in
     except KeyboardInterrupt:
         print("收到中断，停止设备池。")
     finally:
+        # stop() 是唯一停止入口；两个池都要停，否则监控任务会残留。
         await asyncio.gather(*(pool.stop() for pool in pools.values()))
     return 0
 

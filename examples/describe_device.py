@@ -91,6 +91,7 @@ def sorted_by_alias(values: dict[str, float | int]) -> dict[str, float | int]:
 
 def demo_constructor_defaults() -> None:
     """演示描述、输入项与设备信息构造器的可选参数。"""
+    # 三个构造器都允许省略可选参数，这里先确认默认值，后续演示才有对照。
     desc = DeviceDescription(device_name="自定义设备")
     item = DeviceItem(0)
     info = JoystickInfo("/dev/input/event0", "自定义设备")
@@ -107,6 +108,7 @@ def build_demo_description() -> DeviceDescription:
         DeviceDescription: 含两个轴、两个按键与一个帽开关的演示描述；轴 code 1
         与按键 code 300 故意不给别名，用来观察 ``str(code)`` 回退。
     """
+    # 位置参数依次是名称、作者、创建日期与说明，随后是轴、按键、帽开关三份列表。
     return DeviceDescription(
         "演示用摇杆",
         "示例作者",
@@ -124,6 +126,7 @@ def print_zero_state(desc: DeviceDescription) -> None:
     Args:
         desc: 待取零状态的设备描述。
     """
+    # 零状态覆盖描述里声明的全部 code；两种视图只差键的类型。
     state = desc.build_state()
     plain = {kind: sorted_by_code(values) for kind, values in state.to_dict().items()}
     aliased = {
@@ -145,6 +148,7 @@ def demo_from_toml(profile: Path) -> None:
     Args:
         profile: TOML 描述文件路径。
     """
+    # 两类失败分开捕获：文件读不到是 OSError，TOML 内容不合法是 ValueError。
     try:
         desc = DeviceDescription.from_toml(str(profile))
     except OSError as error:
@@ -165,6 +169,7 @@ def demo_from_toml_errors(temp_dir: Path) -> None:
     Args:
         temp_dir: 存放临时 TOML 文件的目录。
     """
+    # 第一条分支用不存在的路径触发文件读取错误。
     missing = temp_dir / "missing.toml"
     print(f"[预期异常] from_toml({missing.name})，文件不存在：")
     try:
@@ -172,6 +177,7 @@ def demo_from_toml_errors(temp_dir: Path) -> None:
     except OSError as error:
         print(f"  {type(error).__name__}: {error}")
 
+    # 第二条分支写一段未闭合的字符串，触发 TOML 语法解析错误。
     broken = temp_dir / "broken.toml"
     broken.write_text(BROKEN_TOML, encoding="utf-8")
     print(f"[预期异常] from_toml({broken.name})，TOML 语法错：")
@@ -180,6 +186,7 @@ def demo_from_toml_errors(temp_dir: Path) -> None:
     except ValueError as error:
         print(f"  ValueError: {first_line(error)}")
 
+    # 第三条分支说明空文件是合法输入，字段全部取默认值。
     minimal = temp_dir / "minimal.toml"
     minimal.write_text("", encoding="utf-8")
     desc = DeviceDescription.from_toml(str(minimal))
@@ -194,6 +201,7 @@ def main() -> int:
         int: 进程退出码，恒为 0。
     """
     args = parse_args()
+    # 三段演示依次是：构造器默认值、内存构造的零状态、真实文件与临时文件的解析。
     demo_constructor_defaults()
     desc = build_demo_description()
     print(f"[内存构造] device_name={desc.device_name!r}")
@@ -201,6 +209,7 @@ def main() -> int:
     print(f"  axes={len(desc.axes)} buttons={len(desc.buttons)} hats={len(desc.hats)}")
     print_zero_state(desc)
     demo_from_toml(args.profile)
+    # 临时目录在 with 退出时自动清理，示例不留下任何文件。
     with tempfile.TemporaryDirectory() as name:
         demo_from_toml_errors(Path(name))
     return 0

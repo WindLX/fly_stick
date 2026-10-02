@@ -67,6 +67,7 @@ def print_devices(devices: list[JoystickInfo]) -> None:
     Args:
         devices: `fetch_connected_joysticks()` 返回的设备列表。
     """
+    # 枚举结果含键盘、鼠标等非操纵杆节点，名称与路径一起打印便于挑选。
     print(f"共枚举到 {len(devices)} 个输入设备（含非操纵杆节点）：")
     for index, device in enumerate(devices):
         print(f"  [{index}] {device.name}  {device.path}")
@@ -82,9 +83,11 @@ def select_devices(devices: list[JoystickInfo], names: list[str]) -> list[Joysti
     Returns:
         list[JoystickInfo]: 选中的设备；同名设备按枚举顺序取尚未使用的第一个。
     """
+    # 不指定名称时取前两个设备，方便无参数直接观察双设备输出。
     if not names:
         return devices[:2]
 
+    # 一台手柄可能对应多个 event 节点，同路径只选中一次。
     selected: list[JoystickInfo] = []
     used_paths: set[str] = set()
     for name in names:
@@ -97,6 +100,7 @@ def select_devices(devices: list[JoystickInfo], names: list[str]) -> list[Joysti
             None,
         )
         if match is None:
+            # 名字写错或设备未连接都跳过，其余设备继续监控。
             print(f"没有找到名为 {name!r} 的设备，已跳过。")
             continue
         used_paths.add(match.path)
@@ -117,6 +121,7 @@ def open_devices(
     """
     opened: list[tuple[JoystickInfo, PyJoystick]] = []
     for info in devices:
+        # 逐个打开：单台设备失败不中断整个示例，其余设备照常监控。
         try:
             opened.append((info, PyJoystick(info.path)))
         except PermissionError:
@@ -140,12 +145,15 @@ async def monitor(
     Returns:
         int: 恒为 0，表示正常结束。
     """
+    # 取最长设备名作列宽，多台设备的输出才能对齐成表。
     label_width = max(len(info.name) for info, _ in opened)
     rounds = 0
     try:
         while iterations <= 0 or rounds < iterations:
+            # 事件按设备分别缓存：每个 get_state() 只返回该设备本轮的事件。
             for info, joystick in opened:
                 state = joystick.get_state()
+                # 没有新事件的设备保持静默，避免每轮刷屏。
                 if state.axes or state.buttons or state.hats:
                     print(
                         f"{info.name:<{label_width}} "
@@ -153,6 +161,7 @@ async def monitor(
                         f"hats={state.hats}"
                     )
             rounds += 1
+            # 让出事件循环，给其他协程（含设备读取）执行机会。
             await asyncio.sleep(0.02)
     except KeyboardInterrupt:
         print("\n已停止读取。")
@@ -172,6 +181,7 @@ async def main(argv: list[str] | None = None) -> int:
     """
     args = parse_args(argv)
 
+    # 先枚举再挑选：--name 的取值必须来自这次的枚举结果。
     devices = fetch_connected_joysticks()
     if not devices:
         print(NO_DEVICE_REASON)
@@ -183,6 +193,7 @@ async def main(argv: list[str] | None = None) -> int:
         print("没有选中任何设备；请用 --name 指定上面列出的设备名。")
         return 0
 
+    # 选中的设备可能因权限或热插拔打不开，open_devices() 会逐台跳过。
     opened = open_devices(selected)
     if not opened:
         print("选中的设备都打不开，退出。")

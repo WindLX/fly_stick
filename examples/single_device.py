@@ -71,6 +71,8 @@ def print_devices(devices: list[JoystickInfo]) -> None:
     Args:
         devices: `fetch_connected_joysticks()` 返回的设备列表。
     """
+    # 列表顺序就是 --index 的取值顺序，先打印出来方便用户选号。
+    # 枚举结果包含键盘、鼠标等非操纵杆节点，型号要按 name 自行辨认。
     print(f"共枚举到 {len(devices)} 个输入设备（含非操纵杆节点）：")
     for index, device in enumerate(devices):
         print(f"  [{index}] {device.name}  {device.path}")
@@ -82,6 +84,7 @@ def list_devices() -> int:
     Returns:
         int: 恒为 0，表示正常结束。
     """
+    # --list 分支只枚举不打开，因此不受设备读权限影响。
     devices = fetch_connected_joysticks()
     if not devices:
         print(NO_DEVICE_REASON)
@@ -104,6 +107,7 @@ def open_device(info: JoystickInfo) -> PyJoystick | None:
     try:
         return PyJoystick(info.path)
     except PermissionError:
+        # 无读权限最常见，提示指向 input 组与 udev 规则这两条修复路径。
         print(
             f"没有读取 {info.path} 的权限；请把当前用户加入 input 组或配置 udev 规则。"
         )
@@ -124,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         int: 退出码；没有可用设备、序号越界或读取失败同样返回 0。
     """
     args = parse_args(argv)
+    # --list 是最安全的入口：只枚举设备名与路径，不占用设备节点。
     if args.list:
         return list_devices()
 
@@ -133,22 +138,27 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     print_devices(devices)
 
+    # 越界序号属于用户输入错误，打印可用范围后正常退出。
     if not 0 <= args.index < len(devices):
         print(f"序号 {args.index} 超出范围；可用序号为 0 到 {len(devices) - 1}。")
         return 0
 
     info = devices[args.index]
+    # 打开失败时 open_device() 已经打印中文原因，这里只需结束示例。
     joystick = open_device(info)
     if joystick is None:
         return 0
 
     print(f"已打开 {info.name} ({info.path})；按 Ctrl+C 停止。")
+    # 先把「空字典表示本轮没有新事件」讲清楚，读者才不会把静止误判成故障。
     print("提示：某一轮 get_state() 返回空字典，表示该轮没有收到新事件。")
 
     rounds = 0
     try:
+        # 循环条件同时覆盖「固定轮数」和「读到 Ctrl+C」两种用法。
         while args.iterations <= 0 or rounds < args.iterations:
             state = joystick.get_state()
+            # get_state() 是事件差分：静止时三个映射都为空，因此只在有事件时打印。
             if state.axes or state.buttons or state.hats:
                 print(f"axes={state.axes} buttons={state.buttons} hats={state.hats}")
             rounds += 1

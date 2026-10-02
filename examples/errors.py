@@ -63,6 +63,7 @@ def demo_missing_path() -> None:
     """打开不存在的设备路径，演示 ``FileNotFoundError``。"""
     print(f"[演示] 打开不存在的设备路径 {MISSING_DEVICE_PATH}：")
     try:
+        # 路径不存在时内核返回 ENOENT，Python 侧映射为 FileNotFoundError。
         PyJoystick(MISSING_DEVICE_PATH)
     except FileNotFoundError as error:
         print(f"  FileNotFoundError: {error}")
@@ -76,6 +77,7 @@ def demo_permission_denied(temp_dir: Path) -> None:
     """
     denied = temp_dir / "denied-event"
     denied.write_text("not a device", encoding="utf-8")
+    # 权限位设为 000，模拟无权读取设备节点；root 会绕过权限位。
     denied.chmod(0o000)
     print(f"[演示] 打开无读权限的普通文件 {denied.name}：")
     try:
@@ -83,6 +85,7 @@ def demo_permission_denied(temp_dir: Path) -> None:
     except PermissionError as error:
         print(f"  PermissionError: {error}（当前用户读不到该文件）")
     except OSError as error:
+        # 以 root 运行时权限位被绕过，错误会推迟到设备探测阶段。
         print(f"  {type(error).__name__}: {error}")
         print("  以 root 运行时权限位被绕过，会在设备探测阶段报这个错。")
 
@@ -94,6 +97,7 @@ def demo_from_toml_errors(temp_dir: Path) -> None:
         temp_dir: 存放临时 TOML 文件的目录。
     """
     missing = temp_dir / "missing.toml"
+    # 文件不存在走 OSError 分支；内容不合法走 ValueError 分支。
     print(f"[演示] from_toml({missing.name})，文件不存在：")
     try:
         DeviceDescription.from_toml(str(missing))
@@ -116,6 +120,7 @@ def demo_button_mode_error() -> None:
         DeviceButtonMode("press")
     except ValueError as error:
         print(f"  ValueError: {error}")
+    # 合法取值只有 hold 与 trigger，构造字符串时同样走这两个名字。
     print("  合法写法：", end="")
     print(f"{DeviceButtonMode('hold')!r} 或 {DeviceButtonMode('trigger')!r}")
 
@@ -128,6 +133,7 @@ def demo_device_node(device: Path) -> None:
     """
     print(f"[演示] 打开设备节点 {device}：")
     try:
+        # 默认参数指向 /dev/input/event0；打不开时按 OSError 打印，不抛 traceback。
         joystick = PyJoystick(str(device))
         state = joystick.get_state()
     except OSError as error:
@@ -140,6 +146,7 @@ async def demo_pool_states() -> None:
     """演示未启动、运行、超时与停止后的读取错误。"""
     pool = PyDevicePool({})
     print("[演示] 未 reset() 就读取空设备池：")
+    # 阶段一：尚未启动，两个入口都必须抛 RuntimeError。
     try:
         pool.fetch_nowait()
     except RuntimeError as error:
@@ -149,6 +156,7 @@ async def demo_pool_states() -> None:
     except RuntimeError as error:
         print(f"  await pool.fetch() -> RuntimeError: {error}")
 
+    # 阶段二：空描述的池也能启动，此时 fetch 没有事件可等，超时即抛 TimeoutError。
     await pool.reset()
     print(f"[演示] reset() 之后：fetch_nowait() -> {pool.fetch_nowait()}")
     try:
@@ -157,6 +165,7 @@ async def demo_pool_states() -> None:
         print(f"  await pool.fetch(timeout_seconds=0) -> TimeoutError: {error}")
     await pool.stop()
 
+    # 阶段三：stop() 之后回到未启动状态，两个入口再次抛 RuntimeError。
     print("[演示] stop() 之后：")
     try:
         pool.fetch_nowait()
@@ -175,7 +184,9 @@ def main() -> int:
         int: 进程退出码，恒为 0。
     """
     args = parse_args()
+    # 顺序按「不需要设备 -> 需要设备」排列，纯数据演示先跑完。
     demo_missing_path()
+    # 临时目录在 with 退出时自动清理，权限位与坏 TOML 只影响临时文件。
     with tempfile.TemporaryDirectory() as name:
         temp_dir = Path(name)
         demo_permission_denied(temp_dir)

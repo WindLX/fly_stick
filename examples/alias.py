@@ -43,6 +43,7 @@ def default_profile() -> Path:
     Returns:
         Path: 包根目录下 ``devices/Thrustmaster/ta320.toml`` 的绝对路径。
     """
+    # 默认路径由脚本自身位置推出，因此从任意工作目录运行都能找到描述文件。
     root = Path(__file__).resolve().parents[1]
     return root / "devices" / "Thrustmaster" / "ta320.toml"
 
@@ -94,6 +95,7 @@ def print_alias_table(desc: DeviceDescription) -> None:
     ):
         print(f"[{kind}] 共 {len(items)} 项")
         for item in items:
+            # 没有别名的输入项在别名映射里回退成 code 的字符串形式。
             if item.alias is None:
                 print(f"  code {item.code:<4} -> 无别名，键为 {str(item.code)!r}")
             else:
@@ -110,14 +112,17 @@ def print_alias_state(
         state: 本轮由 ``get_state()`` 得到的状态。
         index: 轮次序号，从 1 开始。
     """
+    # get_state() 是事件差分：本轮没有任何事件时三个映射都为空。
     if not (state.axes or state.buttons or state.hats):
         print(f"第 {index} 轮：本次调用没有收到事件，三个映射都是空的。")
         return
+    # 一次取四种视图：to_alias_dict() 按种类分组，三个 get_alias_*() 直接给单类。
     aliases = state.to_alias_dict(desc)
     axes = state.get_alias_axes(desc)
     buttons = state.get_alias_buttons(desc)
     hats = state.get_alias_hats(desc)
     print(f"第 {index} 轮 本轮命中的键：")
+    # 排序后打印，抵消 Rust 侧映射不固定的迭代顺序。
     for kind in ("axes", "buttons", "hats"):
         print(f"  to_alias_dict[{kind!r}] = {sorted_by_alias(aliases[kind])}")
     print(f"  get_alias_axes()    = {sorted_by_alias(axes)}")
@@ -139,8 +144,10 @@ def run(profile: Path, rounds: int, interval: float) -> int:
     desc = DeviceDescription.from_toml(str(profile))
     print(f"描述文件：{profile}")
     print(f"设备名：{desc.device_name!r}（作者 {desc.author}，创建 {desc.created}）")
+    # 先打印完整对照表；别名映射里只会出现本轮命中的键，需要对照表才能还原全貌。
     print_alias_table(desc)
 
+    # 名称唯一匹配失败不报错，打印别名表后正常退出。
     connected = fetch_connected_joysticks()
     matches = [info for info in connected if info.name == desc.device_name]
     if not matches:
@@ -152,6 +159,7 @@ def run(profile: Path, rounds: int, interval: float) -> int:
     print(f"\n匹配设备：{info.name}（{info.path}）")
     print("请拨动任一根轴或按下按钮；每轮只显示本次事件命中的别名键。")
     try:
+        # PyJoystick 只接受字符串路径。
         joystick = PyJoystick(info.path)
     except OSError as error:
         print(f"打开 {info.path} 失败：{type(error).__name__}: {error}")
@@ -159,6 +167,7 @@ def run(profile: Path, rounds: int, interval: float) -> int:
         return 0
 
     try:
+        # 逐轮读取；每轮的 get_state() 与上一轮互不累积。
         for index in range(1, rounds + 1):
             print_alias_state(desc, joystick.get_state(), index)
             time.sleep(interval)

@@ -78,6 +78,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--debounce",
         type=float,
         default=0.1,
+        # 去抖只作用于按键按下的那一个边沿；轴、帽开关与按键释放不受影响。
         help="按键去抖时长，单位秒，默认 0.1",
     )
     parser.add_argument(
@@ -101,6 +102,7 @@ def print_devices(devices: list[JoystickInfo]) -> None:
     Args:
         devices: `fetch_connected_joysticks()` 返回的设备列表。
     """
+    # 枚举包含键盘、鼠标等非操纵杆节点，打印全名便于和描述文件的 device_name 核对。
     for device in devices:
         print(f"  {device.name}  {device.path}")
 
@@ -114,6 +116,7 @@ def load_profile(path: Path) -> DeviceDescription | None:
     Returns:
         DeviceDescription | None: 解析成功时返回描述；失败时打印中文原因并返回 `None`。
     """
+    # 文件缺失与内容解析失败分开提示，方便区分路径写错和 TOML 写错。
     if not path.is_file():
         print(f"设备描述文件不存在：{path}")
         return None
@@ -137,6 +140,7 @@ async def main(argv: list[str] | None = None) -> int:
     """
     args = parse_args(argv)
 
+    # 先读描述、再枚举设备，把「描述读不到」和「设备对不上」分成两条提示。
     description = load_profile(args.profile)
     if description is None:
         return 0
@@ -145,23 +149,28 @@ async def main(argv: list[str] | None = None) -> int:
     if not devices:
         print(NO_DEVICE_REASON)
         return 0
+    # 预检只按名称比对；真正的唯一匹配与打开由 reset() 完成。
     if all(device.name != description.device_name for device in devices):
         print(f"没有找到名为 {description.device_name!r} 的设备；当前连接的有：")
         print_devices(devices)
         print("请连接对应设备，或用 --profile 指定匹配的描述文件。")
         return 0
 
+    # 逻辑名默认取描述文件名，池内各设备用逻辑名区分。
     logical_name = args.logical_name or args.profile.stem
+    # 构造阶段只登记描述；设备在 reset() 中才被打开和监控。
     pool = PyDevicePool(
         {logical_name: description},
         debounce_seconds=args.debounce,
     )
     try:
+        # reset() 重新枚举、按名称唯一匹配并全量预打开，失败时整池保持停止。
         matched = await pool.reset()
     except (LookupError, OSError, ValueError) as error:
         print(f"设备池启动失败：{type(error).__name__}: {error}")
         return 0
 
+    # matched 的每一项是「逻辑名 -> (设备描述, 设备信息)」。
     for name, (_description, info) in matched.items():
         print(f"已开始监控 {name} → {info.path} ({info.name})")
 
@@ -170,6 +179,7 @@ async def main(argv: list[str] | None = None) -> int:
         while args.iterations <= 0 or rounds < args.iterations:
             # fetch 会阻塞到状态变化；指定 --timeout 后超时会抛 TimeoutError。
             states = await pool.fetch(timeout_seconds=args.timeout)
+            # 池返回完整快照，静止时三个映射都为空，可以直接跳过。
             for name, state in states.items():
                 if state.axes or state.buttons or state.hats:
                     print(f"{name}: {state.to_dict()}")
