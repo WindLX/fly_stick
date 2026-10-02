@@ -1,6 +1,6 @@
 [package]
 name = "fly_stick"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A Python extension for fly stick input device handling"
 license = "MIT"
