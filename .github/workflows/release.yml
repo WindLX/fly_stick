@@ -31,7 +31,7 @@ jobs:
       - name: Install just
         run: cargo install just --locked
       - name: Check package versions
-        run: uv run --no-sync python scripts/check_versions.py
+        run: uv run --no-sync python scripts/version.py check
       - name: Match tag to package version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
