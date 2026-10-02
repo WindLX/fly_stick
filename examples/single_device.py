@@ -1,91 +1,164 @@
-# Example: Asynchronous Device Monitoring with fly_stick
-# This example demonstrates how to asynchronously monitor multiple fly_stick devices
-# found any input devices
-# and print their state changes. It uses asyncio for non-blocking I/O operations.
-# and handles device monitoring in a way that allows for graceful shutdown
-#  on user interruption.
+"""单个操纵杆的最小示例：枚举设备、打开一个、循环读取状态。
 
-import asyncio
+本示例演示 `fly_stick` 的最短使用路径：
 
-import fly_stick
+1. `fetch_connected_joysticks()` 枚举 `/dev/input/event*` 下的全部输入节点；
+2. 按序号选出一个设备路径；
+3. `PyJoystick(path)` 打开它，循环调用 `get_state()`。
+
+关键语义：`get_state()` 返回的是**本次调用期间收到的事件**，不是设备的完整快照。
+静止时 `axes`、`buttons`、`hats` 都是空字典，所以本示例只在有事件的那一轮打印。
+
+需要什么硬件：一个能被 evdev 识别的操纵杆或手柄（例如 `/dev/input/event3`）。
+没有设备、序号越界或没有读权限时，示例打印中文原因后返回，退出码为 0；
+`--list` 只枚举设备、不打开设备，因此不受权限影响。
+
+怎么跑：
+
+```bash
+uv run python examples/single_device.py --list
+uv run python examples/single_device.py
+uv run python examples/single_device.py --index 1 --iterations 200
+```
+"""
+
+from __future__ import annotations
+
+import argparse
+import time
+
+from fly_stick import JoystickInfo, PyJoystick, fetch_connected_joysticks
+
+NO_DEVICE_REASON = (
+    "没有找到可读的操纵杆设备；请确认设备已连接，"
+    "并把当前用户加入 input 组或配置 udev 规则。"
+)
 
 
-async def monitor_device(device_path: str, device_name: str) -> None:
-    """
-    Asynchronously monitor input from a single device.
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """解析命令行参数。
 
     Args:
-        device_path: Path to the device
-        device_name: Human-readable name of the device
+        argv: 参数字符串列表；为 `None` 时由 `argparse` 读取 `sys.argv`。
 
-    Raises:
-        IOError: If device cannot be accessed
-        asyncio.CancelledError: If monitoring is cancelled
+    Returns:
+        argparse.Namespace: 含 `list`、`index` 与 `iterations` 的解析结果。
     """
-    try:
-        joystick = fly_stick.PyJoystick(device_path)
-        print(f"Started monitoring {device_name}")
-
-        while True:
-            # Get device state
-            state = joystick.get_state()
-            axes, buttons, hats = state.axes, state.buttons, state.hats
-
-            # Only print status when there are changes
-            if axes or buttons or hats:
-                print(
-                    f"[{device_name}], axes: {axes}, buttons: {buttons}, hats: {hats}"
-                )
-
-            # Use async sleep
-            await asyncio.sleep(0.01)
-
-    except OSError as e:
-        print(f"Failed to monitor {device_name}: {e}")
-    except asyncio.CancelledError:
-        print(f"Stopped monitoring {device_name}")
-        raise
+    parser = argparse.ArgumentParser(description="读取单个操纵杆设备的状态")
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="只列出枚举到的输入设备后退出，不打开任何设备",
+    )
+    parser.add_argument(
+        "--index",
+        type=int,
+        default=0,
+        help="要打开的设备序号（见 --list 输出），默认 0",
+    )
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=0,
+        help="读取轮数；0 表示一直读取直到按 Ctrl+C，默认 0",
+    )
+    return parser.parse_args(argv)
 
 
-async def main() -> None:
+def print_devices(devices: list[JoystickInfo]) -> None:
+    """按序号打印已枚举的设备。
+
+    Args:
+        devices: `fetch_connected_joysticks()` 返回的设备列表。
     """
-    Demonstrate how to asynchronously monitor multiple fly_stick devices.
+    print(f"共枚举到 {len(devices)} 个输入设备（含非操纵杆节点）：")
+    for index, device in enumerate(devices):
+        print(f"  [{index}] {device.name}  {device.path}")
 
-    This function enumerates all available input devices and creates monitoring
-    tasks for each device. The monitoring continues until interrupted by Ctrl+C.
+
+def list_devices() -> int:
+    """枚举并打印输入设备，不打开任何设备节点。
+
+    Returns:
+        int: 恒为 0，表示正常结束。
     """
-    # Enumerate all available input devices
-    devices = fly_stick.fetch_connected_joysticks()
-
+    devices = fetch_connected_joysticks()
     if not devices:
-        print("No input devices found!")
-        return
+        print(NO_DEVICE_REASON)
+        return 0
+    print_devices(devices)
+    return 0
 
-    print(f"Found {len(devices)} devices:")
-    for device in devices:
-        device_path, device_name = device.path, device.name
-        print(f"  {device_name} at {device_path}")
 
-    # Create list of monitoring tasks
-    tasks: list[asyncio.Task] = []
-    for device in devices:
-        device_path, device_name = device.path, device.name
-        task = asyncio.create_task(monitor_device(device_path, device_name))
-        tasks.append(task)
+def open_device(info: JoystickInfo) -> PyJoystick | None:
+    """打开一个设备节点。
 
-    print(f"\nStarting monitoring {len(tasks)} devices (Press Ctrl+C to stop)...")
+    注意 `PyJoystick` 只接受字符串路径，`JoystickInfo` 不能直接传入。
 
+    Args:
+        info: 由 `fetch_connected_joysticks()` 返回的设备信息。
+
+    Returns:
+        PyJoystick | None: 打开成功时返回设备对象；失败时打印中文原因并返回 `None`。
+    """
     try:
-        # Wait for all tasks to complete (will run indefinitely)
-        await asyncio.gather(*tasks)
+        return PyJoystick(info.path)
+    except PermissionError:
+        print(
+            f"没有读取 {info.path} 的权限；请把当前用户加入 input 组或配置 udev 规则。"
+        )
+    except FileNotFoundError:
+        print(f"设备节点 {info.path} 不存在，可能已被拔出。")
+    except OSError as error:
+        print(f"打开设备 {info.path} 失败：{error}")
+    return None
+
+
+def main(argv: list[str] | None = None) -> int:
+    """运行单设备示例。
+
+    Args:
+        argv: 参数字符串列表；为 `None` 时由 `argparse` 读取 `sys.argv`。
+
+    Returns:
+        int: 退出码；没有可用设备、序号越界或读取失败同样返回 0。
+    """
+    args = parse_args(argv)
+    if args.list:
+        return list_devices()
+
+    devices = fetch_connected_joysticks()
+    if not devices:
+        print(NO_DEVICE_REASON)
+        return 0
+    print_devices(devices)
+
+    if not 0 <= args.index < len(devices):
+        print(f"序号 {args.index} 超出范围；可用序号为 0 到 {len(devices) - 1}。")
+        return 0
+
+    info = devices[args.index]
+    joystick = open_device(info)
+    if joystick is None:
+        return 0
+
+    print(f"已打开 {info.name} ({info.path})；按 Ctrl+C 停止。")
+    print("提示：某一轮 get_state() 返回空字典，表示该轮没有收到新事件。")
+
+    rounds = 0
+    try:
+        while args.iterations <= 0 or rounds < args.iterations:
+            state = joystick.get_state()
+            if state.axes or state.buttons or state.hats:
+                print(f"axes={state.axes} buttons={state.buttons} hats={state.hats}")
+            rounds += 1
+            time.sleep(0.02)
     except KeyboardInterrupt:
-        print("\nStopping device monitoring...")
-        # Cancel all tasks
-        for task in tasks:
-            task.cancel()
-        # Wait for task cleanup to complete
-        await asyncio.gather(*tasks, return_exceptions=True)
+        print("\n已停止读取。")
+    except OSError as error:
+        print(f"读取设备失败：{error}")
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(main())

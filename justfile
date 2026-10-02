@@ -1,15 +1,33 @@
 set shell := ["bash", "-lc"]
 
+# 列出全部命令。
+
 default:
     @just --list
+
+# 同步 dev 依赖组，再用 maturin develop 把扩展模块装进当前虚拟环境。
+# 首次克隆仓库、或 Rust 侧改动之后执行一次即可。
+#
+# 同步依赖并安装扩展模块
 
 setup:
     uv sync --group dev
     uv run maturin develop
 
+# 就地格式化 Rust 与 Python 源码：cargo fmt 与 ruff format。
+# 只处理 src/fly_stick、tests 与 examples 三个目录。
+#
+# 就地格式化 Rust 与 Python 源码
+
 fmt:
     cargo fmt --all
     uv run ruff format src/fly_stick tests examples
+
+# 静态检查：cargo fmt --check、cargo clippy（警告即错误）、
+# ruff check、ruff format --check 与 mypy。
+# 不构建扩展模块，也不需要真实设备。
+#
+# 跑全部静态检查
 
 check:
     cargo fmt --all -- --check
@@ -18,16 +36,41 @@ check:
     uv run ruff format src/fly_stick tests examples --check
     uv run mypy src/fly_stick tests
 
-test-rust:
-    cargo test --all-features
+# 完整测试：先跑 Rust 单测，再重建扩展模块跑 Python 测试。
+# 测试不依赖真实硬件。
+#
+# 跑 Rust 与 Python 测试
 
-test-python:
-    uv run maturin develop
-    uv run pytest tests
+test: _test-rust _test-python
 
-test: test-rust test-python
+# 构建 release wheel，产物在 target/wheels 下。
+# 发布流程也走这条命令，可用它核对很多 linux 平台标签与 abi3 产物。
+#
+# 构建 release wheel
 
 build:
     uv run maturin build --release
 
+# 提交前把静态检查、测试与构建依次跑一遍。
+# 与根仓库的 just check-stick / just test-stick 覆盖范围一致。
+#
+# 提交前跑检查、测试与构建
+
 pre-commit: check test build
+
+# ───────── 单项入口（私有，不在 just --list 里）─────────
+
+# 只跑 Rust 单测：TOML 解析、别名映射与设备描述默认值。
+#
+# 只跑 Rust 单测
+
+_test-rust:
+    cargo test --all-features
+
+# 重建扩展模块后只跑 Python 测试，主要是导出面冒烟。
+#
+# 重建扩展后只跑 Python 测试
+
+_test-python:
+    uv run maturin develop
+    uv run pytest tests
